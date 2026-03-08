@@ -114,7 +114,7 @@ def run_assistant():
                 continue
 
             speak("What is the message?")
-            message1 = listen()
+            message = listen()
                                                                                                         
             try:
                 now = datetime.datetime.now()
