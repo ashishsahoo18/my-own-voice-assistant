@@ -7,162 +7,203 @@ import wikipedia
 import pywhatkit
 import pyjokes
 import requests
+import csv
+import time
 
+try:
+    import google.generativeai as genai
+except ImportError:
+    genai = None
+
+# ===============================
+# 🔐 PUT YOUR NEW GEMINI API KEY
+# ===============================
+GEMINI_API_KEY = "YOUR_NEW_API_KEY_HERE"
+
+if genai and GEMINI_API_KEY != "":
+    genai.configure(api_key=GEMINI_API_KEY)
+
+    assistant_personality = """
+    You are a smart female AI assistant.
+    Keep responses short, natural, and friendly.
+    Do not give long answers.
+    Speak like a real human assistant.
+    """
+
+    model = genai.GenerativeModel(
+        model_name='gemini-1.5-flash',
+        system_instruction=assistant_personality
+    )
+else:
+    model = None
+
+# ===============================
+# 🔊 VOICE SETUP
+# ===============================
 engine = pyttsx3.init()
 recognizer = sr.Recognizer()
 
+voices = engine.getProperty("voices")
+if len(voices) > 1:
+    engine.setProperty("voice", voices[1].id)
+
+engine.setProperty('rate', 160)
+
 def speak(text):
+    print("Assistant:", text)
     engine.say(text)
     engine.runAndWait()
 
-def listen():
-    with sr.Microphone() as source:
-        print("Listening...")
-        recognizer.pause_threshold = 1
-        audio = recognizer.listen(source)
-
+# ===============================
+# 📱 LOAD CONTACTS
+# ===============================
+def load_contacts():
+    contacts = {}
     try:
-        print("Recognizing...")
+        with open("contacts.csv", "r") as file:
+            reader = csv.DictReader(file)
+            for row in reader:
+                contacts[row["name"].lower()] = row["number"]
+    except:
+        pass
+    return contacts
+
+contacts = load_contacts()
+
+# ===============================
+# 🎤 LISTEN FUNCTION
+# ===============================
+def listen():
+    try:
+        with sr.Microphone() as source:
+            recognizer.adjust_for_ambient_noise(source, duration=1)
+            audio = recognizer.listen(source, timeout=5)
+
         command = recognizer.recognize_google(audio, language="en-in")
         print("User:", command)
         return command.lower()
     except:
         return ""
 
-def weather(city):
-    api_key = "YOUR_OPENWEATHER_API_KEY"
-    url = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}&units=metric"
+# ===============================
+# 🧠 MEMORY SYSTEM
+# ===============================
+conversation_history = []
+
+def get_ai_response(query):
+    if not model:
+        return "AI not configured."
+
+    conversation_history.append(f"User: {query}")
+
+    prompt = "\n".join(conversation_history[-5:])
+
     try:
-        data = requests.get(url).json()
-        if data["cod"] != "404":
-            temp = data["main"]["temp"]
-            desc = data["weather"][0]["description"]
-            return f"The temperature in {city} is {temp} degree celsius with {desc}."
-        else:
-            return "City not found."
+        response = model.generate_content(prompt)
+        reply = response.text.replace("*", "").replace("#", "")[:200]
+        conversation_history.append(f"Assistant: {reply}")
+        return reply
     except:
-        return "Unable to fetch weather."
+        return "I'm having trouble thinking right now."
 
+# ===============================
+# 📱 SMART WHATSAPP
+# ===============================
+def send_whatsapp(query):
+    for name in contacts:
+        if name in query:
+            number = contacts[name]
 
-def convert_number(text):
-    words = {
-        "zero":"0","one":"1","two":"2","three":"3","four":"4",
-        "five":"5","six":"6","seven":"7","eight":"8","nine":"9"
-    }
-    text = text.replace("plus", "+").replace(" ", "")
-    for w, d in words.items():
-        text = text.replace(w, d)
-    return text
+            if "saying" in query:
+                message = query.split("saying")[-1].strip()
+            else:
+                speak("What should I say?")
+                message = listen()
 
+            speak(f"Sending message to {name}")
+            webbrowser.open("https://web.whatsapp.com")
+            time.sleep(10)
 
+            try:
+                pywhatkit.sendwhatmsg_instantly(number, message, wait_time=15)
+                speak("Message sent")
+            except:
+                speak("Failed to send message")
+            return
+
+    speak("Contact not found")
+
+# ===============================
+# ⚙️ COMMAND HANDLER
+# ===============================
+def process_command(query):
+
+    if "time" in query:
+        speak(datetime.datetime.now().strftime("%I:%M %p"))
+
+    elif "date" in query:
+        speak(datetime.datetime.now().strftime("%d %B %Y"))
+
+    elif "open youtube" in query:
+        speak("Opening YouTube")
+        webbrowser.open("https://youtube.com")
+
+    elif "open google" in query:
+        speak("Opening Google")
+        webbrowser.open("https://google.com")
+
+    elif "play" in query:
+        song = query.replace("play", "")
+        speak(f"Playing {song}")
+        pywhatkit.playonyt(song)
+
+    elif "joke" in query:
+        speak(pyjokes.get_joke())
+
+    elif "send" in query and "whatsapp" in query:
+        send_whatsapp(query)
+
+    elif "open" in query:
+        app = query.replace("open", "").strip()
+        os.system(f"start {app}")
+
+    elif "shutdown" in query:
+        speak("Shutting down")
+        os.system("shutdown /s /t 1")
+
+    elif "restart" in query:
+        speak("Restarting")
+        os.system("shutdown /r /t 1")
+
+    elif "exit" in query or "stop" in query:
+        speak("Goodbye")
+        exit()
+
+    # 🧠 Emotion detection
+    elif "sad" in query or "tired" in query:
+        speak("I understand. Want me to help you feel better?")
+
+    else:
+        speak(get_ai_response(query))
+
+# ===============================
+# 🔊 WAKE WORD SYSTEM
+# ===============================
 def run_assistant():
-    speak("Hello! Pro Voice Assistant activated.")
+    speak("Assistant is ready. Say Hey Jarvis to start.")
 
     while True:
         query = listen()
-        if query == "":
-            continue
 
-        # TIME
-        if "time" in query:
-            time = datetime.datetime.now().strftime("%I:%M %p")
-            speak(f"The time is {time}")
+        if "hey jarvis" in query:
+            speak("Yes?")
+            command = listen()
 
-        # DATE
-        elif "date" in query:
-            date = datetime.datetime.now().strftime("%d %B %Y")
-            speak(f"Today's date is {date}")
+            if command:
+                process_command(command)
 
-        # WIKIPEDIA
-        elif "wikipedia" in query:
-            speak("Searching Wikipedia")
-            topic = query.replace("wikipedia", "")
-            try:
-                info = wikipedia.summary(topic, 2)
-                speak(info)
-            except:
-                speak("I could not find information.")
-
-        # GOOGLE SEARCH
-        elif "search" in query:
-            speak("Searching on Google")
-            pywhatkit.search(query.replace("search", ""))
-
-        # PLAY SONG
-        elif query.startswith("play"):
-            song = query.replace("play", "")
-            speak(f"Playing {song} on YouTube")
-            pywhatkit.playonyt(song)
-
-        # OPEN WEBSITES
-        elif "open youtube" in query:
-            speak("Opening YouTube")
-            webbrowser.open("https://youtube.com")
-
-        elif "open google" in query:
-            speak("Opening Google")
-            webbrowser.open("https://google.com")
-
-        # ✅ WHATSAPP MESSAGE (YOUR CODE ADDED HERE)
-        elif "send message" in query:
-            speak("Tell me the number with country code")
-            raw_number = listen()
-            number = convert_number(raw_number)
-
-            if not number.startswith("+"):
-                speak("Invalid number format")
-                continue
-
-            speak("What is the message?")
-            message = listen()
-                                                                                                        
-            try:
-                now = datetime.datetime.now()
-                pywhatkit.sendwhatmsg(
-                    number,
-                    message,
-                    now.hour,
-                    now.minute + 1
-                )
-                speak("Message will be sent in one minute")
-            except Exception as e:
-                speak("WhatsApp message failed")
-                print(e)
-
-        # OPEN APPS
-        elif "open notepad" in query:
-            speak("Opening Notepad")
-            os.startfile("notepad.exe")
-
-        elif "open calculator" in query:
-            speak("Opening Calculator")
-            os.startfile("calc.exe")
-
-        # JOKE
-        elif "joke" in query:
-            speak(pyjokes.get_joke())
-
-        # WEATHER
-        elif "weather" in query:
-            speak("Which city?")
-            city = listen()
-            speak(weather(city))
-
-        # SYSTEM
-        elif "shutdown" in query:
-            speak("Shutting down system")
-            os.system("shutdown /s /t 1")
-
-        elif "restart" in query:
-            speak("Restarting system")
-            os.system("shutdown /r /t 1")
-
-        # EXIT
-        elif "exit" in query or "stop" in query:
-            speak("Goodbye, shutting down assistant")
-            break
-
-        else:
-            speak("Sorry, I didn't understand.")
-
-run_assistant()
+# ===============================
+# 🚀 START
+# ===============================
+if __name__ == "__main__":
+    run_assistant()
