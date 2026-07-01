@@ -2,6 +2,8 @@ import speech_recognition as sr
 import pyttsx3
 import datetime
 import webbrowser
+from gtts import gTTS
+from playsound import playsound
 import os
 import wikipedia
 import pywhatkit
@@ -9,6 +11,7 @@ import pyjokes
 import requests
 import csv
 import time
+
 
 try:
     import google.generativeai as genai
@@ -118,6 +121,29 @@ def send_whatsapp(query):
             return
 
     speak("Contact not found")
+
+def speak(text):
+
+    print("Assistant:", text)
+
+    language = "or"
+
+    if any("\u0B00" <= c <= "\u0B7F" for c in text):
+        language = "or"
+    else:
+        language = "en"
+
+
+    voice = gTTS(
+        text=text,
+        lang=language
+    )
+
+    voice.save("voice.mp3")
+
+    playsound("voice.mp3")
+
+    os.remove("voice.mp3")
 
 # ===============================
 # ⚙️ COMMAND HANDLER
