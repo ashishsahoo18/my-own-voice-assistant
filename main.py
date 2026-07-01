@@ -15,7 +15,7 @@ import time
 
 
 try:
-    import google.generativeai as genai
+    from google import genai
 except ImportError:
     genai = None
 
@@ -126,25 +126,17 @@ def send_whatsapp(query):
     speak("Contact not found")
 
 def speak(text):
-
     print("Assistant:", text)
 
-    language = "or"
+    tts = gTTS(text=text, lang="en")
+    tts.save("voice.mp3")
 
-    if any("\u0B00" <= c <= "\u0B7F" for c in text):
-        language = "or"
-    else:
-        language = "en"
+    pygame.mixer.init()
+    pygame.mixer.music.load("voice.mp3")
+    pygame.mixer.music.play()
 
-
-    voice = gTTS(
-        text=text,
-        lang=language
-    )
-
-    voice.save("voice.mp3")
-
-    playsound("voice.mp3")
+    while pygame.mixer.music.get_busy():
+        pass
 
     os.remove("voice.mp3")
 
