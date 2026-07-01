@@ -3,7 +3,7 @@ import pyttsx3
 import datetime
 import webbrowser
 from gtts import gTTS
-from playsound import playsound
+import pygame
 from dotenv import load_dotenv
 import os
 import wikipedia
