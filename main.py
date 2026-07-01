@@ -69,42 +69,28 @@ def load_contacts():
     return contacts
 
 contacts = load_contacts()
-
-# ===============================
-# 🎤 LISTEN FUNCTION
-# ===============================
+#  ---listen() function----
 def listen():
     try:
         with sr.Microphone() as source:
-            recognizer.adjust_for_ambient_noise(source, duration=1)
+            print("Listening...")
+            recognizer.adjust_for_ambient_noise(source, duration=0.5)
             audio = recognizer.listen(source, timeout=5)
 
-        command = recognizer.recognize_google(audio, language="en-in")
+        command = recognizer.recognize_google(
+            audio,
+            language="or-IN"
+        )
+
         print("User:", command)
         return command.lower()
-    except:
+
+    except sr.UnknownValueError:
         return ""
 
-# ===============================
-# 🧠 MEMORY SYSTEM
-# ===============================
-conversation_history = []
-
-def get_ai_response(query):
-    if not model:
-        return "AI not configured."
-
-    conversation_history.append(f"User: {query}")
-
-    prompt = "\n".join(conversation_history[-5:])
-
-    try:
-        response = model.generate_content(prompt)
-        reply = response.text.replace("*", "").replace("#", "")[:200]
-        conversation_history.append(f"Assistant: {reply}")
-        return reply
-    except:
-        return "I'm having trouble thinking right now."
+    except Exception as e:
+        print(e)
+        return ""
 
 # ===============================
 # 📱 SMART WHATSAPP
