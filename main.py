@@ -4,6 +4,7 @@ import datetime
 import webbrowser
 from gtts import gTTS
 from playsound import playsound
+from dotenv import load_dotenv
 import os
 import wikipedia
 import pywhatkit
@@ -21,7 +22,9 @@ except ImportError:
 # ===============================
 # 🔐 PUT YOUR NEW GEMINI API KEY
 # ===============================
-GEMINI_API_KEY = "YOUR_NEW_API_KEY_HERE"
+load_dotenv()
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if genai and GEMINI_API_KEY != "":
     genai.configure(api_key=GEMINI_API_KEY)
