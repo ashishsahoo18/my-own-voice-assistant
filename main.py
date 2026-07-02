@@ -1,216 +1,199 @@
-import speech_recognition as sr
-import pyttsx3
-import datetime
-import webbrowser
-from gtts import gTTS
-import pygame
-from dotenv import load_dotenv
-import os
-import wikipedia
+# ================= IMPORTS =================
 import pywhatkit
-import pyjokes
-import requests
-import csv
 import time
+import cv2
+import pyttsx3
+import speech_recognition as sr
+import os
+import subprocess
+import webbrowser
+from openai import OpenAI
 
+# ================= OPENAI =================
+client = OpenAI(api_key="YOUR_API_KEY_HERE")
 
-try:
-    from google import genai
-except ImportError:
-    genai = None
-
-# ===============================
-# 🔐 PUT YOUR NEW GEMINI API KEY
-# ===============================
-load_dotenv()
-
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-if genai and GEMINI_API_KEY != "":
-    genai.configure(api_key=GEMINI_API_KEY)
-
-    assistant_personality = """
-    You are a smart female AI assistant.
-    Keep responses short, natural, and friendly.
-    Do not give long answers.
-    Speak like a real human assistant.
-    """
-
-    model = genai.GenerativeModel(
-        model_name='gemini-1.5-flash',
-        system_instruction=assistant_personality
-    )
-else:
-    model = None
-
-# ===============================
-# 🔊 VOICE SETUP
-# ===============================
+# ================= VOICE SETUP =================
 engine = pyttsx3.init()
-recognizer = sr.Recognizer()
-
-voices = engine.getProperty("voices")
-if len(voices) > 1:
-    engine.setProperty("voice", voices[1].id)
-
-engine.setProperty('rate', 160)
+voices = engine.getProperty('voices')
+engine.setProperty('voice', voices[1].id)
+engine.setProperty('rate', 145)
 
 def speak(text):
-    print("Assistant:", text)
     engine.say(text)
     engine.runAndWait()
 
-# ===============================
-# 📱 LOAD CONTACTS
-# ===============================
-def load_contacts():
-    contacts = {}
-    try:
-        with open("contacts.csv", "r") as file:
-            reader = csv.DictReader(file)
-            for row in reader:
-                contacts[row["name"].lower()] = row["number"]
-    except:
-        pass
-    return contacts
-
-contacts = load_contacts()
-#  ---listen() function----
+# ================= LISTEN =================
 def listen():
+    r = sr.Recognizer()
+    with sr.Microphone() as source:
+        r.adjust_for_ambient_noise(source)
+        audio = r.listen(source)
     try:
-        with sr.Microphone() as source:
-            print("Listening...")
-            recognizer.adjust_for_ambient_noise(source, duration=0.5)
-            audio = recognizer.listen(source, timeout=5)
+        return r.recognize_google(audio).lower()
+    except:
+        return ""
 
-        command = recognizer.recognize_google(
-            audio,
-            language="or-IN"
+# ================= AI =================
+def ai_reply(prompt):
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4.1-mini",
+            messages=[{"role": "user", "content": prompt}]
         )
+        return response.choices[0].message.content
+    except:
+        return "I am offline. Please try basic commands."
 
-        print("User:", command)
-        return command.lower()
+# ================= OFFLINE FALLBACK =================
+offline_answers = {
+    "what is python": "Python is a programming language used for backend, AI and automation.",
+    "what is ai": "AI means machines that can think and learn like humans.",
+    "what is array": "Array stores multiple values in one variable."
+}
 
-    except sr.UnknownValueError:
-        return ""
+# ================= SYSTEM FUNCTIONS =================
+def open_notepad():
+    subprocess.Popen(["notepad.exe"])
 
-    except Exception as e:
-        print(e)
-        return ""
+def create_folder(name):
+    path = os.path.join(os.getcwd(), name)
+    if not os.path.exists(path):
+        os.mkdir(path)
+        return "Folder created"
+    return "Folder already exists"
 
-# ===============================
-# 📱 SMART WHATSAPP
-# ===============================
-def send_whatsapp(query):
-    for name in contacts:
-        if name in query:
-            number = contacts[name]
+def delete_folder(name):
+    path = os.path.join(os.getcwd(), name)
+    if os.path.exists(path):
+        os.rmdir(path)
+        return "Folder deleted"
+    return "Folder not found"
 
-            if "saying" in query:
-                message = query.split("saying")[-1].strip()
-            else:
-                speak("What should I say?")
-                message = listen()
+def create_file(name):
+    if not name.endswith(".txt"):
+        name += ".txt"
+    open(name, "w").close()
+    subprocess.Popen(["notepad.exe", name])
+    return "File created and opened"
 
-            speak(f"Sending message to {name}")
-            webbrowser.open("https://web.whatsapp.com")
-            time.sleep(10)
+def delete_file(name):
+    if not name.endswith(".txt"):
+        name += ".txt"
+    if os.path.exists(name):
+        os.remove(name)
+        return "File deleted"
+    return "File not found"
 
-            try:
-                pywhatkit.sendwhatmsg_instantly(number, message, wait_time=15)
-                speak("Message sent")
-            except:
-                speak("Failed to send message")
-            return
+# ================= CALCULATOR =================
+def calculate(cmd):
+    try:
+        cmd = cmd.replace("plus", "+").replace("minus", "-")
+        cmd = cmd.replace("into", "*").replace("multiply", "*")
+        cmd = cmd.replace("divide", "/")
+        result = eval(cmd)
+        return f"Result is {result}"
+    except:
+        return "Calculation error"
 
-    speak("Contact not found")
+# ================= CHROME SEARCH =================
+def chrome_search(query):
+    webbrowser.open(f"https://www.google.com/search?q={query}")
 
-def speak(text):
-    print("Assistant:", text)
+# ================= YOUTUBE =================
+def play_youtube(song):
+    pywhatkit.playonyt(song)
 
-    tts = gTTS(text=text, lang="en")
-    tts.save("voice.mp3")
+# ================= WHATSAPP =================
+def send_whatsapp(number, message):
+    number = "+91" + number
+    pywhatkit.sendwhatmsg_instantly(
+        phone_no=number,
+        message=message,
+        wait_time=10,
+        tab_close=True
+    )
 
-    pygame.mixer.init()
-    pygame.mixer.music.load("voice.mp3")
-    pygame.mixer.music.play()
+# ================= FACE =================
+face = cv2.imread("face.jpg")
+face = cv2.resize(face, (400, 400))
 
-    while pygame.mixer.music.get_busy():
-        pass
+def show_face(talking=False):
+    img = face.copy()
+    if talking:
+        cv2.ellipse(img, (200, 280), (40, 20), 0, 0, 180, (0,0,0), 3)
+    else:
+        cv2.line(img, (160, 280), (240, 280), (0,0,0), 3)
+    cv2.imshow("Ayra", img)
+    cv2.waitKey(1)
 
-    os.remove("voice.mp3")
+# ================= MAIN =================
+speak("Ayra activated. Say Ayra to start.")
 
-# ===============================
-# ⚙️ COMMAND HANDLER
-# ===============================
-def process_command(query):
+while True:
+    command = listen()
 
-    if "time" in query:
-        speak(datetime.datetime.now().strftime("%I:%M %p"))
+    if "ayra" not in command:
+        continue
 
-    elif "date" in query:
-        speak(datetime.datetime.now().strftime("%d %B %Y"))
+    speak("Yes Ashu")
+    user_cmd = listen()
+    print("Command:", user_cmd)
+    show_face(True)
 
-    elif "open youtube" in query:
-        speak("Opening YouTube")
-        webbrowser.open("https://youtube.com")
+    if "exit" in user_cmd:
+        speak("Goodbye Ashu")
+        break
 
-    elif "open google" in query:
-        speak("Opening Google")
-        webbrowser.open("https://google.com")
+    elif "open notepad" in user_cmd:
+        open_notepad()
+        speak("Opening notepad")
 
-    elif "play" in query:
-        song = query.replace("play", "")
-        speak(f"Playing {song}")
-        pywhatkit.playonyt(song)
+    elif "play song" in user_cmd:
+        speak("Which song?")
+        song = listen()
+        play_youtube(song)
+        speak("Playing song")
 
-    elif "joke" in query:
-        speak(pyjokes.get_joke())
+    elif "send whatsapp message" in user_cmd:
+        speak("Tell number")
+        number = listen().replace(" ", "")
+        speak("Tell message")
+        message = listen()
+        send_whatsapp(number, message)
+        speak("Message sent")
 
-    elif "send" in query and "whatsapp" in query:
-        send_whatsapp(query)
+    elif "create folder" in user_cmd:
+        speak("Folder name")
+        name = listen()
+        speak(create_folder(name))
 
-    elif "open" in query:
-        app = query.replace("open", "").strip()
-        os.system(f"start {app}")
+    elif "delete folder" in user_cmd:
+        speak("Folder name")
+        name = listen()
+        speak(delete_folder(name))
 
-    elif "shutdown" in query:
-        speak("Shutting down")
-        os.system("shutdown /s /t 1")
+    elif "create file" in user_cmd:
+        speak("File name")
+        name = listen()
+        speak(create_file(name))
 
-    elif "restart" in query:
-        speak("Restarting")
-        os.system("shutdown /r /t 1")
+    elif "delete file" in user_cmd:
+        speak("File name")
+        name = listen()
+        speak(delete_file(name))
 
-    elif "exit" in query or "stop" in query:
-        speak("Goodbye")
-        exit()
+    elif "calculate" in user_cmd:
+        speak(calculate(user_cmd))
 
-    # 🧠 Emotion detection
-    elif "sad" in query or "tired" in query:
-        speak("I understand. Want me to help you feel better?")
+    elif "search" in user_cmd:
+        query = user_cmd.replace("search", "")
+        chrome_search(query)
+        speak("Searching")
+
+    elif user_cmd in offline_answers:
+        speak(offline_answers[user_cmd])
 
     else:
-        speak(get_ai_response(query))
+        speak(ai_reply(user_cmd))
 
-# ===============================
-# 🔊 WAKE WORD SYSTEM
-# ===============================
-def run_assistant():
-    speak("Assistant is ready. Say Hey Jarvis to start.")
-
-    while True:
-        query = listen()
-
-        if "hey jarvis" in query:
-            speak("Yes?")
-            command = listen()
-
-            if command:
-                process_command(command)
-
-# ===============================
-# 🚀 START
-# ===============================
-if __name__ == "__main__":
-    run_assistant()
+cv2.destroyAllWindows()
