@@ -12,7 +12,6 @@ from openai import OpenAI
 
 load_dotenv()
 
-print(os.getenv("OPENAI_API_KEY"))  # test
 # ================= OPENAI =================
 client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
