@@ -4,13 +4,19 @@ import time
 import cv2
 import pyttsx3
 import speech_recognition as sr
+from dotenv import load_dotenv
 import os
 import subprocess
 import webbrowser
 from openai import OpenAI
 
+load_dotenv()
+
+print(os.getenv("OPENAI_API_KEY"))  # test
 # ================= OPENAI =================
-client = OpenAI(api_key="YOUR_API_KEY_HERE")
+client = OpenAI(
+    api_key=os.getenv("OPENAI_API_KEY")
+)
 
 # ================= VOICE SETUP =================
 engine = pyttsx3.init()
@@ -19,8 +25,18 @@ engine.setProperty('voice', voices[1].id)
 engine.setProperty('rate', 145)
 
 def speak(text):
+
+    print("Ayra:", text)
+
     engine.say(text)
+
+    for i in range(10):
+        show_face(True)
+        time.sleep(0.1)
+
     engine.runAndWait()
+
+    show_face(False)
 
 # ================= LISTEN =================
 def listen():
