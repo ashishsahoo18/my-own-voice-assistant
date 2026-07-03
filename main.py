@@ -141,7 +141,7 @@ def show_face(talking=False):
     cv2.imshow("Ayra", img)
     cv2.waitKey(1)
 
-# ================= MAIN =================
+
 speak("Ayra activated. Say Ayra to start.")
 
 while True:
