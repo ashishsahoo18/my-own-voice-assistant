@@ -1,0 +1,15 @@
+2026-07-04 10:10:57 | ayra | INFO | Starting Ayra Voice Assistant...
+2026-07-04 10:10:57 | ayra | WARNING | WEATHER_API_KEY is missing. Weather command will fail gracefully.
+2026-07-04 10:10:57 | ayra | WARNING | NEWS_API_KEY is missing. News command will fail gracefully.
+2026-07-04 10:10:59 | ayra | INFO | Selected female voice: Microsoft Zira Desktop - English (United States)
+2026-07-04 10:11:16 | ayra | INFO | Face UI thread started.
+2026-07-04 10:11:16 | ayra | INFO | Assistant started.
+2026-07-04 10:11:22 | ayra | INFO | Recognized speech: hello
+2026-07-04 10:11:32 | ayra | INFO | Recognized speech: hello
+2026-07-04 10:11:37 | ayra | INFO | Recognized speech: open YouTube
+2026-07-04 10:11:46 | ayra | INFO | Recognized speech: open YouTube
+2026-07-04 10:12:52 | ayra | INFO | Recognized speech: Chennai to make iron
+2026-07-04 10:12:57 | ayra | INFO | Recognized speech: Facebook status
+2026-07-04 10:15:36 | ayra | INFO | Recognized speech: Main Tujhe
+2026-07-04 10:15:53 | ayra | INFO | Face UI thread stopped.
+2026-07-04 10:15:53 | ayra | INFO | Assistant stopped.
