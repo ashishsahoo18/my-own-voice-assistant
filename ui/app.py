@@ -11,36 +11,30 @@ class AyraApp(ctk.CTk):
 
         self.title("Ayra AI")
         self.geometry("1200x700")
-        self.minsize(1000, 600)
 
-        # Sidebar
-        self.sidebar = ctk.CTkFrame(self, width=220)
-        self.sidebar.pack(side="left", fill="y")
-
-        ctk.CTkLabel(
-            self.sidebar,
-            text="🤖 Ayra AI",
-            font=("Segoe UI", 26, "bold")
-        ).pack(pady=30)
-
-        buttons = [
-            "🏠 Home",
-            "💬 Chat",
-            "🧠 Memory",
-            "⚙ Settings"
-        ]
-
-        for text in buttons:
-            ctk.CTkButton(
-                self.sidebar,
-                text=text,
-                height=45
-            ).pack(fill="x", padx=15, pady=8)
-
-        # Main Area
+        # Main Frame
         self.main = ctk.CTkFrame(self)
-        self.main.pack(side="right", fill="both", expand=True)
+        self.main.pack(fill="both", expand=True)
 
+        # Header
+        header = ctk.CTkFrame(self.main, height=60)
+        header.pack(fill="x", padx=20, pady=(20, 10))
+
+        title = ctk.CTkLabel(
+            header,
+            text="🤖 Ayra AI",
+            font=("Segoe UI", 24, "bold")
+        )
+        title.pack(side="left", padx=20)
+
+        status = ctk.CTkLabel(
+            header,
+            text="🟢 Online",
+            font=("Segoe UI", 14)
+        )
+        status.pack(side="right", padx=20)
+
+        # Chat Box
         self.chat_box = ctk.CTkTextbox(
             self.main,
             font=("Segoe UI", 15)
@@ -49,28 +43,61 @@ class AyraApp(ctk.CTk):
             fill="both",
             expand=True,
             padx=20,
-            pady=20
+            pady=10
         )
 
+        self.chat_box.insert(
+            "end",
+            """
+👋 Welcome Ashu!
+
+I'm Ayra AI.
+
+I can help you with:
+
+• AI Chat
+• Coding
+• Voice Commands
+• Windows Automation
+• Weather
+• News
+• File Management
+
+Type a message below or press 🎤.
+
+"""
+        )
+
+        # Bottom
         bottom = ctk.CTkFrame(self.main)
-        bottom.pack(fill="x", padx=20, pady=15)
+        bottom.pack(fill="x", padx=20, pady=20)
 
         self.entry = ctk.CTkEntry(
             bottom,
-            placeholder_text="Type your message..."
+            placeholder_text="Ask Ayra anything...",
+            height=45,
+            corner_radius=15
         )
-        self.entry.pack(side="left", fill="x", expand=True, padx=(0, 10))
+        self.entry.pack(
+            side="left",
+            fill="x",
+            expand=True,
+            padx=(0, 10)
+        )
 
         self.voice_btn = ctk.CTkButton(
             bottom,
             text="🎤",
-            width=55
+            width=55,
+            corner_radius=15
         )
         self.voice_btn.pack(side="left", padx=(0, 10))
 
         self.send_btn = ctk.CTkButton(
             bottom,
-            text="Send"
+            text="➤",
+            width=60,
+            corner_radius=15
         )
         self.send_btn.pack(side="left")
 
