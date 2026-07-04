@@ -1,0 +1,12 @@
+customtkinter
+openai
+python-dotenv
+SpeechRecognition
+pyttsx3
+opencv-python
+pillow
+pywhatkit
+requests
+psutil
+wikipedia
+pyjokes
