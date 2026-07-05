@@ -1,5 +1,4 @@
 customtkinter
-openai
 python-dotenv
 SpeechRecognition
 pyttsx3
@@ -10,3 +9,4 @@ requests
 psutil
 wikipedia
 pyjokes
+google-genai
