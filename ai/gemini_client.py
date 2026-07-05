@@ -40,7 +40,16 @@ class GeminiClient:
             )
             return self._extract_text(response)
         except Exception as exc:
-            raise RuntimeError(f"Gemini API error: {exc}") from exc
+            message = str(exc).lower()
+            if "quota" in message or "rate limit" in message:
+                raise RuntimeError("The AI service is currently at capacity. Please try again shortly.") from exc
+            if "api key" in message or "unauthorized" in message or "invalid" in message:
+                raise RuntimeError("The AI service is not available with the current API configuration. Please check your API key.") from exc
+            if "timeout" in message or "timed out" in message:
+                raise RuntimeError("I'm unable to connect to the AI service right now. Please try again later.") from exc
+            if "connection" in message or "network" in message or "internet" in message or "failed to connect" in message:
+                raise RuntimeError("I'm unable to connect to the AI service right now. Please try again later.") from exc
+            raise RuntimeError("I'm sorry, I couldn't process that request right now. Please try again later.") from exc
 
     def _build_contents(self, prompt: str, history: Optional[list[dict]]) -> list[dict]:
         contents: list[dict] = []
