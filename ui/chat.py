@@ -1,0 +1,312 @@
+import threading
+import tkinter as tk
+from datetime import datetime
+from typing import Optional
+
+import customtkinter as ctk
+
+from ai.assistant import AyraAssistant
+from database.chat_db import ChatStore
+
+
+class ChatBubble:
+    """Render a single chat bubble in the UI."""
+
+    def __init__(self, parent: ctk.CTkFrame, role: str, text: str) -> None:
+        self.frame = ctk.CTkFrame(parent, fg_color="transparent")
+        self.frame.pack(fill="x", pady=6)
+
+        if role == "user":
+            self.label = ctk.CTkLabel(
+                self.frame,
+                text=text,
+                justify="left",
+                wraplength=650,
+                corner_radius=16,
+                fg_color=("#1f6feb", "#2b6cff"),
+                text_color="white",
+                padx=14,
+                pady=10,
+            )
+            self.label.pack(anchor="e")
+        else:
+            self.label = ctk.CTkLabel(
+                self.frame,
+                text=text,
+                justify="left",
+                wraplength=650,
+                corner_radius=16,
+                fg_color=("#2a2d31", "#33373d"),
+                text_color=("#f2f4f8", "#f2f4f8"),
+                padx=14,
+                pady=10,
+            )
+            self.label.pack(anchor="w")
+
+
+class ChatPanel(ctk.CTkFrame):
+    """Chat interface panel for Ayra."""
+
+    def __init__(self, master: tk.Misc, assistant: AyraAssistant, store: ChatStore) -> None:
+        super().__init__(master, fg_color="transparent")
+        self.assistant = assistant
+        self.store = store
+        self.session_id = self.store.get_or_create_session()
+        self._typing_active = False
+        self._typing_job_id: Optional[str] = None
+        self._spinner_index = 0
+        self._build_ui()
+        self._load_history()
+
+    def _build_ui(self) -> None:
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_rowconfigure(1, weight=1)
+
+        self.header_title = ctk.CTkLabel(
+            self,
+            text="Good day, how can I help?",
+            font=("Segoe UI", 22, "bold"),
+            anchor="w",
+        )
+        self.header_title.grid(row=0, column=0, sticky="w", padx=20, pady=(20, 4))
+
+        self.header_subtitle = ctk.CTkLabel(
+            self,
+            text="AI chat • voice • automation",
+            font=("Segoe UI", 12),
+            text_color=("#6b7280", "#9ca3af"),
+            anchor="w",
+        )
+        self.header_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 10))
+
+        self.chat_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
+        self.chat_frame.grid(row=2, column=0, sticky="nsew", padx=20)
+        self.chat_frame.grid_columnconfigure(0, weight=1)
+
+        input_bar = ctk.CTkFrame(self, fg_color="transparent")
+        input_bar.grid(row=3, column=0, sticky="sew", padx=20, pady=20)
+        input_bar.grid_columnconfigure(0, weight=1)
+
+        self.entry = ctk.CTkEntry(
+            input_bar,
+            placeholder_text="Ask Ayra anything...",
+            height=46,
+            corner_radius=18,
+        )
+        self.entry.grid(row=0, column=0, sticky="ew", padx=(0, 10))
+        self.entry.bind("<Return>", self._on_entry_return)
+        self.entry.bind("<Shift-Return>", self._on_shift_enter)
+
+        self.voice_btn = ctk.CTkButton(
+            input_bar,
+            text="🎤",
+            width=50,
+            height=46,
+            corner_radius=18,
+        )
+        self.voice_btn.grid(row=0, column=1, padx=(0, 10))
+
+        self.send_btn = ctk.CTkButton(
+            input_bar,
+            text="Send",
+            width=90,
+            height=46,
+            corner_radius=18,
+            command=self.send_message,
+        )
+        self.send_btn.grid(row=0, column=2)
+
+        self._add_welcome_message()
+
+    def _add_welcome_message(self) -> None:
+        welcome = ctk.CTkFrame(self.chat_frame, fg_color=("#ffffff", "#121723"))
+        welcome.pack(fill="x", pady=10, ipady=12)
+
+        ctk.CTkLabel(
+            welcome,
+            text="👋 Welcome to Ayra AI",
+            font=("Segoe UI", 20, "bold"),
+            anchor="w",
+        ).pack(anchor="w", padx=16, pady=(12, 6))
+
+        ctk.CTkLabel(
+            welcome,
+            text="Ask anything, control apps, search the web, or talk naturally with voice.",
+            font=("Segoe UI", 13),
+            justify="left",
+            wraplength=680,
+            anchor="w",
+        ).pack(anchor="w", padx=16, pady=(0, 12))
+
+        ctk.CTkButton(
+            welcome,
+            text="Start a conversation",
+            command=lambda: self.entry.focus_set(),
+        ).pack(anchor="w", padx=16, pady=(0, 12))
+
+    def _on_entry_return(self, event: tk.Event) -> str:
+        if self._typing_active:
+            return "break"
+        self.send_message()
+        return "break"
+
+    def _on_shift_enter(self, event: tk.Event) -> str:
+        current = self.entry.get()
+        self.entry.insert(tk.INSERT, "\n")
+        return "break"
+
+    def send_message(self) -> None:
+        if self._typing_active:
+            return
+
+        message = self.entry.get().strip()
+        if not message:
+            return
+
+        self._clear_welcome_if_present()
+        self._add_message("user", message)
+        self.store.save_message(self.session_id, "user", message)
+        self.entry.delete(0, tk.END)
+        self._set_busy_state(True)
+        self._show_typing_indicator()
+        self.update_idletasks()
+
+        thread = threading.Thread(target=self._handle_ai_reply, args=(message,), daemon=True)
+        thread.start()
+
+    def _handle_ai_reply(self, message: str) -> None:
+        try:
+            reply = self.assistant.handle(message)
+        except Exception as exc:
+            reply = self._friendly_error_message(exc)
+
+        self.after(0, self._start_streaming_reply, reply)
+
+    def _start_streaming_reply(self, reply: str) -> None:
+        self._hide_typing_indicator()
+        self._set_busy_state(False)
+        self._stream_reply(reply)
+
+    def _stream_reply(self, reply: str) -> None:
+        if not reply:
+            reply = "I don't have a response for that yet."
+
+        bubble = ChatBubble(self.chat_frame, "assistant", "")
+        bubble.label.configure(text="")
+        self._scroll_to_bottom()
+
+        words = reply.split(" ")
+        if not words:
+            words = [reply]
+
+        self._stream_words(bubble.label, words, 0, reply)
+
+    def _stream_words(self, label: ctk.CTkLabel, words: list[str], index: int, full_reply: str) -> None:
+        if index >= len(words):
+            self.store.save_message(self.session_id, "assistant", full_reply)
+            self._scroll_to_bottom()
+            return
+
+        displayed = " ".join(words[: index + 1])
+        label.configure(text=displayed)
+        self._scroll_to_bottom()
+        self.after(35, self._stream_words, label, words, index + 1, full_reply)
+
+    def _add_message(self, role: str, text: str) -> None:
+        self._clear_welcome_if_present()
+        bubble = ChatBubble(self.chat_frame, role, text)
+        self._scroll_to_bottom()
+
+    def _show_typing_indicator(self) -> None:
+        self._typing_active = True
+        self._typing_frame = ctk.CTkFrame(self.chat_frame, fg_color="transparent")
+        self._typing_frame.pack(fill="x", pady=6)
+        self._typing_label = ctk.CTkLabel(
+            self._typing_frame,
+            text="⠋ Ayra is typing...",
+            justify="left",
+            wraplength=650,
+            corner_radius=16,
+            fg_color=("#2a2d31", "#33373d"),
+            text_color=("#f2f4f8", "#f2f4f8"),
+            padx=14,
+            pady=10,
+        )
+        self._typing_label.pack(anchor="w")
+        self._scroll_to_bottom()
+        self._update_typing_indicator()
+
+    def _update_typing_indicator(self) -> None:
+        if not self._typing_active:
+            return
+
+        spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+        spinner = spinner_chars[self._spinner_index % len(spinner_chars)]
+        self._typing_label.configure(text=f"{spinner} Ayra is typing...")
+        self._spinner_index = (self._spinner_index + 1) % len(spinner_chars)
+        self._typing_job_id = self.after(120, self._update_typing_indicator)
+
+    def _hide_typing_indicator(self) -> None:
+        self._typing_active = False
+        if self._typing_job_id is not None:
+            self.after_cancel(self._typing_job_id)
+            self._typing_job_id = None
+        if getattr(self, "_typing_frame", None) is not None:
+            self._typing_frame.destroy()
+
+    def _set_busy_state(self, busy: bool) -> None:
+        self.send_btn.configure(state="disabled" if busy else "normal")
+        self.entry.configure(state="disabled" if busy else "normal")
+        self.voice_btn.configure(state="disabled" if busy else "normal")
+
+    def _scroll_to_bottom(self) -> None:
+        self.update_idletasks()
+        if hasattr(self.chat_frame, "_parent_canvas"):
+            self.chat_frame._parent_canvas.yview_moveto(1.0)
+
+    def _clear_welcome_if_present(self) -> None:
+        for child in list(self.chat_frame.winfo_children()):
+            if isinstance(child, ctk.CTkFrame):
+                for grandchild in child.winfo_children():
+                    if hasattr(grandchild, "cget") and grandchild.cget("text") == "👋 Welcome to Ayra AI":
+                        child.destroy()
+                        return
+
+    def _load_history(self) -> None:
+        sessions = self.store.load_all_sessions()
+        if not sessions:
+            self._show_session_header()
+            return
+
+        for session in sessions:
+            self._show_session_header(session.get("started_at"))
+            for message in session.get("messages", []):
+                self._add_message(message["role"], message["content"])
+
+    def _show_session_header(self, started_at: Optional[str] = None) -> None:
+        if started_at is None:
+            started_at = datetime.now().strftime("%A, %B %d, %Y %I:%M %p")
+        self._add_system_notice(f"{started_at}")
+
+    def _add_system_notice(self, text: str) -> None:
+        label = ctk.CTkLabel(
+            self.chat_frame,
+            text=text,
+            justify="center",
+            wraplength=680,
+            font=("Segoe UI", 11),
+            text_color=("#6b7280", "#9ca3af"),
+        )
+        label.pack(pady=(8, 4))
+
+    def _friendly_error_message(self, error: Exception) -> str:
+        message = str(error).lower()
+        if "timeout" in message or "timed out" in message:
+            return "I'm unable to connect to the AI service right now. Please try again later."
+        if "quota" in message or "rate limit" in message:
+            return "The AI service is currently at capacity. Please try again shortly."
+        if "api key" in message or "invalid" in message or "unauthorized" in message:
+            return "The AI service is not available with the current API configuration. Please check your API key."
+        if "no internet" in message or "connection" in message or "network" in message:
+            return "I'm unable to connect to the AI service right now. Please try again later."
+        return "I'm sorry, I couldn't process that request right now. Please try again later."
