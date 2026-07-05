@@ -1,4 +1,5 @@
 import customtkinter as ctk
+from ai.openaiclient import ask_ai
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -84,12 +85,14 @@ Type a message below or press 🎤.
             expand=True,
             padx=(0, 10)
         )
+        self.entry.bind("<Return>", lambda event: self.send_message())
 
         self.voice_btn = ctk.CTkButton(
             bottom,
             text="🎤",
             width=55,
-            corner_radius=15
+            corner_radius=15,
+            command=self.voice_input
         )
         self.voice_btn.pack(side="left", padx=(0, 10))
 
@@ -97,9 +100,36 @@ Type a message below or press 🎤.
             bottom,
             text="➤",
             width=60,
-            corner_radius=15
+            corner_radius=15,
+            command=self.send_message
         )
         self.send_btn.pack(side="left")
+
+    def send_message(self):
+
+        message = self.entry.get().strip()
+
+        if not message:
+            return
+
+        self.chat_box.insert("end", f"\n👤 You: {message}\n")
+
+        self.entry.delete(0, "end")
+
+        self.update()
+
+        try:
+            reply = ask_ai(message)
+        except Exception as e:
+            reply = f"Error: {e}"
+
+        self.chat_box.insert("end", f"🤖 Ayra: {reply}\n\n")
+
+        self.chat_box.see("end")
+
+    def voice_input(self):
+        self.chat_box.insert("end", "\n🎤 Listening...\n")
+        self.chat_box.see("end")
 
     def run(self):
         self.mainloop()
