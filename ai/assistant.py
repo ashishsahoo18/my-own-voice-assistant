@@ -87,7 +87,11 @@ class AyraAssistant:
         try:
             response = ask_ai(text if not prompt_context else f"{prompt_context}\nUser: {text}", history=self.memory.snapshot())
         except Exception as exc:
-            response = f"Sorry, I hit an issue: {exc}"
+            import traceback
+
+            traceback.print_exc()
+            print(f"Actual Error: {exc}")
+            response = f"Actual Error: {type(exc).__name__}: {exc}"
 
         self.memory.add_user_message(text)
         self.memory.add_assistant_message(response)

@@ -1,11 +1,13 @@
 import os
+import traceback
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 
 class GeminiClient:
@@ -40,16 +42,29 @@ class GeminiClient:
             )
             return self._extract_text(response)
         except Exception as exc:
-            message = str(exc).lower()
-            if "quota" in message or "rate limit" in message:
-                raise RuntimeError("The AI service is currently at capacity. Please try again shortly.") from exc
-            if "api key" in message or "unauthorized" in message or "invalid" in message:
-                raise RuntimeError("The AI service is not available with the current API configuration. Please check your API key.") from exc
-            if "timeout" in message or "timed out" in message:
-                raise RuntimeError("I'm unable to connect to the AI service right now. Please try again later.") from exc
-            if "connection" in message or "network" in message or "internet" in message or "failed to connect" in message:
-                raise RuntimeError("I'm unable to connect to the AI service right now. Please try again later.") from exc
-            raise RuntimeError("I'm sorry, I couldn't process that request right now. Please try again later.") from exc
+            traceback.print_exc()
+            print(f"Actual Error: {exc}")
+            if self._is_quota_error(exc):
+                return (
+                    "The AI service is currently rate-limited by Google. "
+                    "Please wait a moment and try again."
+                )
+            raise
+
+    def _is_quota_error(self, exc: Exception) -> bool:
+        message = str(exc).lower()
+        return any(
+            marker in message
+            for marker in [
+                "resource_exhausted",
+                "quota exceeded",
+                "quota",
+                "rate limit",
+                "too many requests",
+                "429",
+                "free_tier",
+            ]
+        )
 
     def _build_contents(self, prompt: str, history: Optional[list[dict]]) -> list[dict]:
         contents: list[dict] = []
