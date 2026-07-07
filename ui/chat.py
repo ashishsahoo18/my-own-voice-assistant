@@ -384,13 +384,8 @@ class ChatPanel(ctk.CTkFrame):
         self.after(0, self._show_voice_feedback, "Hello Ashu, I'm listening.")
 
     def _friendly_error_message(self, error: Exception) -> str:
-        message = str(error).lower()
-        if "timeout" in message or "timed out" in message:
-            return "I'm unable to connect to the AI service right now. Please try again later."
-        if "quota" in message or "rate limit" in message:
-            return "The AI service is currently at capacity. Please try again shortly."
-        if "api key" in message or "invalid" in message or "unauthorized" in message:
-            return "The AI service is not available with the current API configuration. Please check your API key."
-        if "no internet" in message or "connection" in message or "network" in message:
-            return "I'm unable to connect to the AI service right now. Please try again later."
-        return "I'm sorry, I couldn't process that request right now. Please try again later."
+        import traceback
+
+        traceback.print_exc()
+        print(f"Actual Error: {error}")
+        return f"Actual Error: {type(error).__name__}: {error}"
