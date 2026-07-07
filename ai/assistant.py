@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 from typing import Optional
 
-from ai.gemini_client import ask_ai
+from ai.gemini_client import generate_ai_response
 from ai.memory import ConversationMemory
 from ai.memory_manager import MemoryManager
 from ai.memory_prompt import MemoryPromptBuilder
@@ -85,13 +85,12 @@ class AyraAssistant:
         self._learn_from_text(text)
         prompt_context = self.memory_prompt_builder.build(text)
         try:
-            response = ask_ai(text if not prompt_context else f"{prompt_context}\nUser: {text}", history=self.memory.snapshot())
-        except Exception as exc:
-            import traceback
-
-            traceback.print_exc()
-            print(f"Actual Error: {exc}")
-            response = f"Actual Error: {type(exc).__name__}: {exc}"
+            response = generate_ai_response(
+                text if not prompt_context else f"{prompt_context}\nUser: {text}",
+                history=self.memory.snapshot(),
+            )
+        except Exception:
+            response = "I’m sorry, I couldn’t process that request right now."
 
         self.memory.add_user_message(text)
         self.memory.add_assistant_message(response)
