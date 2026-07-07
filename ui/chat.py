@@ -199,7 +199,9 @@ class ChatPanel(ctk.CTkFrame):
         self.entry.delete(0, tk.END)
         self._set_busy_state(True)
         self._show_typing_indicator()
+        self._set_voice_status("Thinking...")
         self.update_idletasks()
+        self._thinking_timer_id = self.after(2000, self._show_delayed_thinking_indicator)
 
         thread = threading.Thread(target=self._handle_ai_reply, args=(message,), daemon=True)
         thread.start()
@@ -207,15 +209,16 @@ class ChatPanel(ctk.CTkFrame):
     def _handle_ai_reply(self, message: str) -> None:
         try:
             reply = self.assistant.handle(message)
-        except Exception as exc:
-            reply = self._friendly_error_message(exc)
+        except Exception:
+            reply = self._friendly_error_message()
 
         self.after(0, self._start_streaming_reply, reply)
 
     def _start_streaming_reply(self, reply: str) -> None:
+        self.after_cancel(getattr(self, "_thinking_timer_id", None))
         self._hide_typing_indicator()
         self._set_busy_state(False)
-        self._set_voice_status("🧠 Thinking")
+        self._set_voice_status("🟢 Idle")
         self._stream_reply(reply)
 
     def _stream_reply(self, reply: str) -> None:
@@ -279,9 +282,16 @@ class ChatPanel(ctk.CTkFrame):
 
         spinner_chars = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
         spinner = spinner_chars[self._spinner_index % len(spinner_chars)]
-        self._typing_label.configure(text=f"{spinner} Ayra is typing...")
+        self._typing_label.configure(text=f"{spinner} Thinking...")
         self._spinner_index = (self._spinner_index + 1) % len(spinner_chars)
         self._typing_job_id = self.after(120, self._update_typing_indicator)
+
+    def _show_delayed_thinking_indicator(self) -> None:
+        if not getattr(self, "_typing_active", False):
+            return
+        if getattr(self, "_typing_label", None) is not None:
+            self._typing_label.configure(text="Thinking...")
+        self._set_voice_status("Thinking...")
 
     def _hide_typing_indicator(self) -> None:
         self._typing_active = False
@@ -383,9 +393,5 @@ class ChatPanel(ctk.CTkFrame):
         self.after(0, self._set_voice_status, "🎤 Listening")
         self.after(0, self._show_voice_feedback, "Hello Ashu, I'm listening.")
 
-    def _friendly_error_message(self, error: Exception) -> str:
-        import traceback
-
-        traceback.print_exc()
-        print(f"Actual Error: {error}")
-        return f"Actual Error: {type(error).__name__}: {error}"
+    def _friendly_error_message(self) -> str:
+        return "I’m sorry, I couldn’t process that request right now."

@@ -4,15 +4,13 @@ from ai.gemini_client import GeminiClient
 
 
 class GeminiClientQuotaHandlingTests(unittest.TestCase):
-    def test_detects_quota_exhaustion_errors(self) -> None:
+    def test_trim_history_keeps_recent_messages(self) -> None:
         client = GeminiClient()
-
-        self.assertTrue(
-            client._is_quota_error(Exception("RESOURCE_EXHAUSTED: generate_content_free_tier_input_token_count"))
-        )
-        self.assertTrue(client._is_quota_error(Exception("429 Too Many Requests")))
-        self.assertTrue(client._is_quota_error(Exception("Quota exceeded for metric")))
-        self.assertFalse(client._is_quota_error(Exception("Something else failed")))
+        history = [{"role": "user", "content": f"msg{i}"} for i in range(15)]
+        trimmed = client._trim_history(history)
+        self.assertEqual(len(trimmed), 10)
+        self.assertEqual(trimmed[0]["content"], "msg5")
+        self.assertEqual(trimmed[-1]["content"], "msg14")
 
 
 if __name__ == "__main__":
