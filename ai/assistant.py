@@ -10,6 +10,7 @@ from ai.memory_manager import MemoryManager
 from ai.memory_prompt import MemoryPromptBuilder
 from commands.browser import BrowserCommands
 from commands.calculator import Calculator
+from commands.router import CommandRouter
 from commands.system import SystemCommands
 
 
@@ -23,6 +24,7 @@ class AyraAssistant:
         self.browser = BrowserCommands()
         self.calculator = Calculator()
         self.system = SystemCommands()
+        self.router = CommandRouter()
 
     def handle(self, message: str) -> str:
         text = message.strip()
@@ -63,6 +65,10 @@ class AyraAssistant:
 
         if any(op in lowered for op in ["+", "-", "*", "/", "(", ")"]):
             return self.calculator.evaluate(text)
+
+        router_result = self.router.route(text)
+        if router_result and router_result != self.browser.search(text):
+            return router_result
 
         if lowered.startswith("remind me"):
             reminder_text = text[len("remind me"):].strip()
