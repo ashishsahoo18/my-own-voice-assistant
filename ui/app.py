@@ -5,6 +5,8 @@ from ai.assistant import AyraAssistant
 from config.settings import AppSettings
 from database.chat_db import ChatStore
 from ui.chat import ChatPanel
+from ui.setting import VoiceSettingsWindow
+from voice.voice_manager import VoiceManager
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -22,6 +24,7 @@ class AyraApp(ctk.CTk):
         self.settings = AppSettings()
         self.assistant = AyraAssistant()
         self.store = ChatStore()
+        self.voice_manager = VoiceManager()
 
         self.configure(fg_color=("#f5f7fb", "#0f1117"))
         self.grid_columnconfigure(1, weight=1)
@@ -100,6 +103,7 @@ class AyraApp(ctk.CTk):
             fg_color="transparent",
             border_width=1,
             border_color=("#dbe4f0", "#2c313b"),
+            command=self.open_voice_settings,
         ).pack(fill="x")
 
     def _build_main_area(self) -> None:
@@ -108,8 +112,11 @@ class AyraApp(ctk.CTk):
         main.grid_columnconfigure(0, weight=1)
         main.grid_rowconfigure(0, weight=1)
 
-        self.chat_panel = ChatPanel(main, self.assistant, self.store)
+        self.chat_panel = ChatPanel(main, self.assistant, self.store, self.voice_manager)
         self.chat_panel.grid(row=0, column=0, sticky="nsew")
+
+    def open_voice_settings(self) -> None:
+        VoiceSettingsWindow(self.voice_manager)
 
     def toggle_theme(self) -> None:
         current = ctk.get_appearance_mode().lower()

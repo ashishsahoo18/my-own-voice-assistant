@@ -7,6 +7,7 @@ import customtkinter as ctk
 
 from ai.assistant import AyraAssistant
 from database.chat_db import ChatStore
+from voice.voice_manager import VoiceManager
 
 
 class ChatBubble:
@@ -47,7 +48,13 @@ class ChatBubble:
 class ChatPanel(ctk.CTkFrame):
     """Chat interface panel for Ayra."""
 
-    def __init__(self, master: tk.Misc, assistant: AyraAssistant, store: ChatStore) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        assistant: AyraAssistant,
+        store: ChatStore,
+        voice_manager: Optional[VoiceManager] = None,
+    ) -> None:
         super().__init__(master, fg_color="transparent")
         self.assistant = assistant
         self.store = store
@@ -55,8 +62,11 @@ class ChatPanel(ctk.CTkFrame):
         self._typing_active = False
         self._typing_job_id: Optional[str] = None
         self._spinner_index = 0
+        self.voice_manager = voice_manager or VoiceManager()
+        self._voice_status = "🟢 Idle"
         self._build_ui()
         self._load_history()
+        self._start_wake_word_listener()
 
     def _build_ui(self) -> None:
         self.grid_columnconfigure(0, weight=1)
@@ -79,12 +89,21 @@ class ChatPanel(ctk.CTkFrame):
         )
         self.header_subtitle.grid(row=1, column=0, sticky="w", padx=20, pady=(0, 10))
 
+        self.status_label = ctk.CTkLabel(
+            self,
+            text="🟢 Idle",
+            font=("Segoe UI", 12, "bold"),
+            text_color=("#16a34a", "#4ade80"),
+            anchor="w",
+        )
+        self.status_label.grid(row=2, column=0, sticky="w", padx=20, pady=(0, 10))
+
         self.chat_frame = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        self.chat_frame.grid(row=2, column=0, sticky="nsew", padx=20)
+        self.chat_frame.grid(row=3, column=0, sticky="nsew", padx=20)
         self.chat_frame.grid_columnconfigure(0, weight=1)
 
         input_bar = ctk.CTkFrame(self, fg_color="transparent")
-        input_bar.grid(row=3, column=0, sticky="sew", padx=20, pady=20)
+        input_bar.grid(row=4, column=0, sticky="sew", padx=20, pady=20)
         input_bar.grid_columnconfigure(0, weight=1)
 
         self.entry = ctk.CTkEntry(
@@ -103,6 +122,7 @@ class ChatPanel(ctk.CTkFrame):
             width=50,
             height=46,
             corner_radius=18,
+            command=self.start_voice_input,
         )
         self.voice_btn.grid(row=0, column=1, padx=(0, 10))
 
@@ -115,6 +135,16 @@ class ChatPanel(ctk.CTkFrame):
             command=self.send_message,
         )
         self.send_btn.grid(row=0, column=2)
+
+        self.stop_speech_btn = ctk.CTkButton(
+            input_bar,
+            text="Stop",
+            width=70,
+            height=46,
+            corner_radius=18,
+            command=self.stop_speaking,
+        )
+        self.stop_speech_btn.grid(row=0, column=3)
 
         self._add_welcome_message()
 
@@ -185,11 +215,17 @@ class ChatPanel(ctk.CTkFrame):
     def _start_streaming_reply(self, reply: str) -> None:
         self._hide_typing_indicator()
         self._set_busy_state(False)
+        self._set_voice_status("🧠 Thinking")
         self._stream_reply(reply)
 
     def _stream_reply(self, reply: str) -> None:
         if not reply:
             reply = "I don't have a response for that yet."
+
+        self._set_voice_status("🔊 Speaking")
+        if self.voice_manager.settings.get("auto_speaking", True):
+            thread = threading.Thread(target=self.voice_manager.speak, args=(reply,), daemon=True)
+            thread.start()
 
         bubble = ChatBubble(self.chat_frame, "assistant", "")
         bubble.label.configure(text="")
@@ -204,6 +240,7 @@ class ChatPanel(ctk.CTkFrame):
     def _stream_words(self, label: ctk.CTkLabel, words: list[str], index: int, full_reply: str) -> None:
         if index >= len(words):
             self.store.save_message(self.session_id, "assistant", full_reply)
+            self._set_voice_status("🟢 Idle")
             self._scroll_to_bottom()
             return
 
@@ -259,6 +296,10 @@ class ChatPanel(ctk.CTkFrame):
         self.entry.configure(state="disabled" if busy else "normal")
         self.voice_btn.configure(state="disabled" if busy else "normal")
 
+    def _set_voice_status(self, status: str) -> None:
+        self._voice_status = status
+        self.status_label.configure(text=status)
+
     def _scroll_to_bottom(self) -> None:
         self.update_idletasks()
         if hasattr(self.chat_frame, "_parent_canvas"):
@@ -298,6 +339,49 @@ class ChatPanel(ctk.CTkFrame):
             text_color=("#6b7280", "#9ca3af"),
         )
         label.pack(pady=(8, 4))
+
+    def start_voice_input(self) -> None:
+        if self._typing_active:
+            return
+        self._set_voice_status("🎤 Listening")
+        thread = threading.Thread(target=self._handle_voice_input, daemon=True)
+        thread.start()
+
+    def _handle_voice_input(self) -> None:
+        try:
+            text = self.voice_manager.listen_once(status_callback=self._update_voice_status)
+        except Exception as exc:
+            self.after(0, self._set_voice_status, "🟢 Idle")
+            self.after(0, self._show_voice_feedback, "Sorry, I didn't catch that.")
+            return
+
+        self.after(0, self._set_voice_status, "🟢 Idle")
+        if not text:
+            self.after(0, self._show_voice_feedback, "Sorry, I didn't catch that.")
+            return
+
+        self.after(0, self._show_voice_feedback, "I understood.")
+        self.after(0, self.entry.insert, 0, text)
+        self.after(0, self.entry.icursor, len(text))
+        if self.voice_manager.settings.get("auto_send_voice", False):
+            self.after(0, self.send_message)
+
+    def _update_voice_status(self, status: str) -> None:
+        self.after(0, self._set_voice_status, status)
+
+    def _show_voice_feedback(self, message: str) -> None:
+        self.voice_manager.speak(message)
+        self._add_message("assistant", message)
+
+    def stop_speaking(self) -> None:
+        self.voice_manager.stop_speaking()
+
+    def _start_wake_word_listener(self) -> None:
+        self.voice_manager.start_wake_word_listener(self._handle_wake_word)
+
+    def _handle_wake_word(self) -> None:
+        self.after(0, self._set_voice_status, "🎤 Listening")
+        self.after(0, self._show_voice_feedback, "Hello Ashu, I'm listening.")
 
     def _friendly_error_message(self, error: Exception) -> str:
         message = str(error).lower()
