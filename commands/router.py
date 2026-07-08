@@ -49,7 +49,7 @@ class CommandRouter:
         try:
             if lowered.startswith("open "):
                 target = lowered[5:].strip()
-                if target in {"youtube", "github", "gmail", "linkedin", "chatgpt", "google drive", "whatsapp"}:
+                if target in {"youtube", "google", "gmail", "whatsapp", "github", "linkedin", "chatgpt", "google drive"}:
                     return self._route_browser(target)
                 return self.windows.open_app(target)
 
@@ -114,6 +114,16 @@ class CommandRouter:
             return f"Automation error: {exc}"
 
     def _route_browser(self, target: str) -> str:
+        urls = {
+            "youtube": "https://www.youtube.com",
+            "google": "https://www.google.com",
+            "gmail": "https://mail.google.com",
+            "whatsapp": "https://web.whatsapp.com",
+        }
+        if target in urls and target != "whatsapp":
+            return self.browser.open_url(urls[target])
+        if target == "whatsapp":
+            return self.whatsapp.open_whatsapp()
         mapping = {
             "youtube": self.browser.search_youtube,
             "whatsapp": self.whatsapp.open_whatsapp,
