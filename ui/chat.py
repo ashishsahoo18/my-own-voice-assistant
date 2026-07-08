@@ -1,4 +1,5 @@
 import threading
+import time
 import tkinter as tk
 from datetime import datetime
 from typing import Optional
@@ -62,6 +63,9 @@ class ChatPanel(ctk.CTkFrame):
         self._typing_active = False
         self._typing_job_id: Optional[str] = None
         self._spinner_index = 0
+        self._request_in_flight = False
+        self._cooldown_until = 0.0
+        self._rate_limit_seconds = 1.2
         self.voice_manager = voice_manager or VoiceManager()
         self._voice_status = "🟢 Idle"
         self._build_ui()
@@ -186,7 +190,11 @@ class ChatPanel(ctk.CTkFrame):
         return "break"
 
     def send_message(self) -> None:
-        if self._typing_active:
+        if self._typing_active or self._request_in_flight:
+            return
+
+        if time.monotonic() < self._cooldown_until:
+            self._set_voice_status("⏳ Please wait a moment before sending again.")
             return
 
         message = self.entry.get().strip()
@@ -197,6 +205,8 @@ class ChatPanel(ctk.CTkFrame):
         self._add_message("user", message)
         self.store.save_message(self.session_id, "user", message)
         self.entry.delete(0, tk.END)
+        self._cooldown_until = time.monotonic() + self._rate_limit_seconds
+        self._request_in_flight = True
         self._set_busy_state(True)
         self._show_typing_indicator()
         self._set_voice_status("Thinking...")
@@ -217,6 +227,7 @@ class ChatPanel(ctk.CTkFrame):
     def _start_streaming_reply(self, reply: str) -> None:
         self.after_cancel(getattr(self, "_thinking_timer_id", None))
         self._hide_typing_indicator()
+        self._request_in_flight = False
         self._set_busy_state(False)
         self._set_voice_status("🟢 Idle")
         self._stream_reply(reply)
