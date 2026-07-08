@@ -49,7 +49,16 @@ class CommandRouter:
         try:
             if lowered.startswith("open "):
                 target = lowered[5:].strip()
-                if target in {"youtube", "google", "gmail", "whatsapp", "github", "linkedin", "chatgpt", "google drive"}:
+                common_urls = {
+                    "youtube": "https://www.youtube.com",
+                    "google": "https://www.google.com",
+                    "gmail": "https://mail.google.com",
+                }
+                if target in common_urls:
+                    return self.browser.open_url(common_urls[target])
+                if target == "whatsapp":
+                    return self.whatsapp.open_whatsapp()
+                if target in {"github", "linkedin", "chatgpt", "google drive"}:
                     return self._route_browser(target)
                 return self.windows.open_app(target)
 
