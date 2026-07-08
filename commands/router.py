@@ -49,7 +49,7 @@ class CommandRouter:
         try:
             if lowered.startswith("open "):
                 target = lowered[5:].strip()
-                if target in {"youtube", "github", "gmail", "linkedin", "chatgpt", "google drive"}:
+                if target in {"youtube", "github", "gmail", "linkedin", "chatgpt", "google drive", "whatsapp"}:
                     return self._route_browser(target)
                 return self.windows.open_app(target)
 
@@ -116,6 +116,7 @@ class CommandRouter:
     def _route_browser(self, target: str) -> str:
         mapping = {
             "youtube": self.browser.search_youtube,
+            "whatsapp": self.whatsapp.open_whatsapp,
             "github": self.browser.search_github,
             "gmail": self.browser.open_gmail,
             "linkedin": self.browser.open_linkedin,
