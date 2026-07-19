@@ -1,9 +1,10 @@
 {
   "voice_enabled": true,
-  "auto_speaking": false,
-  "voice_id": "",
+  "auto_speaking": true,
+  "auto_send_voice": true,
+  "voice_id": null,
   "speech_rate": 170,
   "volume": 1.0,
-  "language": "or",
+  "language": "en",
   "wake_word": "hey ayra"
 }
