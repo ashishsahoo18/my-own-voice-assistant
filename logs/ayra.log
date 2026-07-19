@@ -1,123 +1,9 @@
-2026-07-04 10:10:57 | ayra | INFO | Starting Ayra Voice Assistant...
-2026-07-04 10:10:57 | ayra | WARNING | WEATHER_API_KEY is missing. Weather command will fail gracefully.
-2026-07-04 10:10:57 | ayra | WARNING | NEWS_API_KEY is missing. News command will fail gracefully.
-2026-07-04 10:10:59 | ayra | INFO | Selected female voice: Microsoft Zira Desktop - English (United States)
-2026-07-04 10:11:16 | ayra | INFO | Face UI thread started.
-2026-07-04 10:11:16 | ayra | INFO | Assistant started.
-2026-07-04 10:11:22 | ayra | INFO | Recognized speech: hello
-2026-07-04 10:11:32 | ayra | INFO | Recognized speech: hello
-2026-07-04 10:11:37 | ayra | INFO | Recognized speech: open YouTube
-2026-07-04 10:11:46 | ayra | INFO | Recognized speech: open YouTube
-2026-07-04 10:12:52 | ayra | INFO | Recognized speech: Chennai to make iron
-2026-07-04 10:12:57 | ayra | INFO | Recognized speech: Facebook status
-2026-07-04 10:15:36 | ayra | INFO | Recognized speech: Main Tujhe
-2026-07-04 10:15:53 | ayra | INFO | Face UI thread stopped.
-2026-07-04 10:15:53 | ayra | INFO | Assistant stopped.
-2026-07-07 20:08:39,799 INFO Database created
-2026-07-07 20:30:20,312 INFO Database created
-2026-07-07 20:30:42,909 INFO Command: what is python?
-2026-07-07 20:30:43,568 ERROR Gemini ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-pro\nPlease retry in 38.296937804s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerDay-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '38s'}]}}
-Traceback (most recent call last):
-  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\ai\gemini_client.py", line 58, in ask
-    response = self.client.models.generate_content(
-        model=self.model,
-        contents=contents,
-        config=types.GenerateContentConfig(system_instruction=self.system_prompt),
-    )
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 6526, in generate_content
-    response = self._generate_content(
-        model=model, contents=contents, config=parsed_config_to_call
-    )
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 4954, in _generate_content
-    response = self._api_client.request(
-        'post', path, request_dict, http_options
-    )
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1618, in request
-    response = self._request(http_request, http_options, stream=False)
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1411, in _request
-    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
-           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 470, in __call__
-    do = self.iter(retry_state=retry_state)
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 371, in iter
-    result = action(retry_state)
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 413, in exc_check
-    raise retry_exc.reraise()
-          ~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 184, in reraise
-    raise self.last_attempt.result()
-          ~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 449, in result
-    return self.__get_result()
-           ~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
-    raise self._exception
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 473, in __call__
-    result = fn(*args, **kwargs)
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1388, in _request_once
-    errors.APIError.raise_for_response(response)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 155, in raise_for_response
-    cls.raise_error(response.status_code, response_json, response)
-    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 184, in raise_error
-    raise ClientError(status_code, response_json, response)
-google.genai.errors.ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-pro\nPlease retry in 38.296937804s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerDay-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '38s'}]}}
-2026-07-07 20:30:43,737 INFO Speech completed
-2026-07-07 20:31:02,399 INFO Speech completed
-2026-07-07 20:31:29,188 INFO Command: what is ml
-2026-07-07 20:31:30,979 ERROR Gemini ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro\nPlease retry in 50.87933453s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerDay-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '50s'}]}}
-Traceback (most recent call last):
-  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\ai\gemini_client.py", line 58, in ask
-    response = self.client.models.generate_content(
-        model=self.model,
-        contents=contents,
-        config=types.GenerateContentConfig(system_instruction=self.system_prompt),
-    )
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 6526, in generate_content
-    response = self._generate_content(
-        model=model, contents=contents, config=parsed_config_to_call
-    )
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 4954, in _generate_content
-    response = self._api_client.request(
-        'post', path, request_dict, http_options
-    )
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1618, in request
-    response = self._request(http_request, http_options, stream=False)
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1411, in _request
-    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
-           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 470, in __call__
-    do = self.iter(retry_state=retry_state)
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 371, in iter
-    result = action(retry_state)
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 413, in exc_check
-    raise retry_exc.reraise()
-          ~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 184, in reraise
-    raise self.last_attempt.result()
-          ~~~~~~~~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 449, in result
-    return self.__get_result()
-           ~~~~~~~~~~~~~~~~~^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
-    raise self._exception
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 473, in __call__
-    result = fn(*args, **kwargs)
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1388, in _request_once
-    errors.APIError.raise_for_response(response)
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 155, in raise_for_response
-    cls.raise_error(response.status_code, response_json, response)
-    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 184, in raise_error
-    raise ClientError(status_code, response_json, response)
-google.genai.errors.ClientError: 429 RESOURCE_EXHAUSTED. {'error': {'code': 429, 'message': 'You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.5-pro\nPlease retry in 50.87933453s.', 'status': 'RESOURCE_EXHAUSTED', 'details': [{'@type': 'type.googleapis.com/google.rpc.Help', 'links': [{'description': 'Learn more about Gemini API quotas', 'url': 'https://ai.google.dev/gemini-api/docs/rate-limits'}]}, {'@type': 'type.googleapis.com/google.rpc.QuotaFailure', 'violations': [{'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerDay-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_input_token_count', 'quotaId': 'GenerateContentInputTokensPerModelPerMinute-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerMinutePerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}, {'quotaMetric': 'generativelanguage.googleapis.com/generate_content_free_tier_requests', 'quotaId': 'GenerateRequestsPerDayPerProjectPerModel-FreeTier', 'quotaDimensions': {'location': 'global', 'model': 'gemini-2.5-pro'}}]}, {'@type': 'type.googleapis.com/google.rpc.RetryInfo', 'retryDelay': '50s'}]}}
-2026-07-07 20:31:31,041 INFO Speech completed
-2026-07-07 20:33:48,398 INFO Speech completed
-2026-07-07 21:16:48,449 INFO Database created
-2026-07-07 21:17:07,623 INFO Command: what is machine learning and FLAT
-2026-07-07 21:17:08,601 ERROR Gemini ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-07-19 08:36:12,295 INFO Database created
+2026-07-19 08:36:25,959 INFO Start listening
+2026-07-19 08:36:28,670 INFO Command: opening youtube
+2026-07-19 08:36:29,102 WARNING Speech was not recognized
+2026-07-19 08:36:29,103 INFO End listening
+2026-07-19 08:36:29,195 ERROR Gemini ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
 Traceback (most recent call last):
   File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\ai\gemini_client.py", line 58, in ask
     response = self.client.models.generate_content(
@@ -164,15 +50,9 @@ Traceback (most recent call last):
   File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 184, in raise_error
     raise ClientError(status_code, response_json, response)
 google.genai.errors.ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
-2026-07-07 21:17:29,271 INFO Start listening
-2026-07-07 21:17:32,725 WARNING Speech was not recognized
-2026-07-07 21:17:32,725 INFO End listening
-2026-07-07 21:17:59,274 INFO Start listening
-2026-07-07 21:18:03,685 INFO End listening
-2026-07-07 21:18:17,076 INFO Start listening
-2026-07-07 21:18:23,857 INFO End listening
-2026-07-07 21:18:27,422 INFO Command: what is flat and a salon
-2026-07-07 21:18:28,277 ERROR Gemini ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-07-19 08:38:42,092 INFO Command: opening whatsapp
+2026-07-19 08:39:43,668 INFO Command: opened yputube
+2026-07-19 08:39:44,628 ERROR Gemini ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
 Traceback (most recent call last):
   File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\ai\gemini_client.py", line 58, in ask
     response = self.client.models.generate_content(
@@ -219,20 +99,36 @@ Traceback (most recent call last):
   File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 184, in raise_error
     raise ClientError(status_code, response_json, response)
 google.genai.errors.ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
-2026-07-11 21:23:13,764 INFO Database created
-2026-07-12 20:15:38,044 INFO Database created
-2026-07-12 20:15:54,472 INFO Start listening
-2026-07-12 20:15:59,577 INFO End listening
-2026-07-12 20:16:09,281 INFO Start listening
-2026-07-12 20:16:16,528 INFO End listening
-2026-07-12 20:16:20,561 INFO Command: what is the name of
-2026-07-12 20:16:21,582 ERROR Gemini ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+2026-07-19 08:50:04,325 INFO Database created
+2026-07-19 08:50:15,623 INFO Start listening
+2026-07-19 08:50:21,259 INFO End listening
+2026-07-19 08:50:27,047 INFO Start listening
+2026-07-19 08:50:34,827 INFO End listening
+2026-07-19 08:50:37,865 INFO Start listening
+2026-07-19 08:50:46,505 WARNING Voice listening timed out
+2026-07-19 08:50:46,505 INFO End listening
+2026-07-19 09:00:02,028 ERROR Wake word detection error: [WinError 10053] An established connection was aborted by the software in your host machine
+2026-07-19 09:00:13,556 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:15,379 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:21,222 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:24,942 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:28,724 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:39,611 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:41,551 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:55,161 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:01:02,182 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:01:07,991 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:01:12,951 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:01:19,601 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 10:51:13,338 INFO Database created
+2026-07-19 10:56:19,214 INFO Database created
+2026-07-19 10:57:15,370 ERROR Gemini ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key not valid. Please pass a valid API key.'}]}}
 Traceback (most recent call last):
-  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\ai\gemini_client.py", line 58, in ask
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\ai\gemini_client.py", line 60, in ask
     response = self.client.models.generate_content(
         model=self.model,
-        contents=contents,
-        config=types.GenerateContentConfig(system_instruction=self.system_prompt),
+    ...<5 lines>...
+        ),
     )
   File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 6526, in generate_content
     response = self._generate_content(
@@ -272,4 +168,101 @@ Traceback (most recent call last):
     ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 184, in raise_error
     raise ClientError(status_code, response_json, response)
-google.genai.errors.ClientError: 404 NOT_FOUND. {'error': {'code': 404, 'message': 'models/gemini-1.5-flash is not found for API version v1beta, or is not supported for generateContent. Call ModelService.ListModels to see the list of available models and their supported methods.', 'status': 'NOT_FOUND'}}
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key not valid. Please pass a valid API key.'}]}}
+2026-07-19 11:11:42,418 INFO Database created
+2026-07-19 11:16:28,677 INFO Database created
+2026-07-19 11:16:51,494 ERROR Gemini ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key not valid. Please pass a valid API key.'}]}}
+Traceback (most recent call last):
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\ai\gemini_client.py", line 60, in ask
+    response = self.client.models.generate_content(
+        model=self.model,
+    ...<5 lines>...
+        ),
+    )
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 6526, in generate_content
+    response = self._generate_content(
+        model=model, contents=contents, config=parsed_config_to_call
+    )
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 4954, in _generate_content
+    response = self._api_client.request(
+        'post', path, request_dict, http_options
+    )
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1618, in request
+    response = self._request(http_request, http_options, stream=False)
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1411, in _request
+    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 470, in __call__
+    do = self.iter(retry_state=retry_state)
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 371, in iter
+    result = action(retry_state)
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 473, in __call__
+    result = fn(*args, **kwargs)
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1388, in _request_once
+    errors.APIError.raise_for_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 155, in raise_for_response
+    cls.raise_error(response.status_code, response_json, response)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 184, in raise_error
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key not valid. Please pass a valid API key.'}]}}
+2026-07-19 11:17:14,120 ERROR Gemini ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key not valid. Please pass a valid API key.'}]}}
+Traceback (most recent call last):
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\ai\gemini_client.py", line 60, in ask
+    response = self.client.models.generate_content(
+        model=self.model,
+    ...<5 lines>...
+        ),
+    )
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 6526, in generate_content
+    response = self._generate_content(
+        model=model, contents=contents, config=parsed_config_to_call
+    )
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\models.py", line 4954, in _generate_content
+    response = self._api_client.request(
+        'post', path, request_dict, http_options
+    )
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1618, in request
+    response = self._request(http_request, http_options, stream=False)
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1411, in _request
+    return self._retry(self._request_once, http_request, stream)  # type: ignore[no-any-return]
+           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 470, in __call__
+    do = self.iter(retry_state=retry_state)
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 371, in iter
+    result = action(retry_state)
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 413, in exc_check
+    raise retry_exc.reraise()
+          ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 184, in reraise
+    raise self.last_attempt.result()
+          ~~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 449, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\concurrent\futures\_base.py", line 401, in __get_result
+    raise self._exception
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\tenacity\__init__.py", line 473, in __call__
+    result = fn(*args, **kwargs)
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\_api_client.py", line 1388, in _request_once
+    errors.APIError.raise_for_response(response)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 155, in raise_for_response
+    cls.raise_error(response.status_code, response_json, response)
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ASHISH\AppData\Local\Programs\Python\Python313\Lib\site-packages\google\genai\errors.py", line 184, in raise_error
+    raise ClientError(status_code, response_json, response)
+google.genai.errors.ClientError: 400 INVALID_ARGUMENT. {'error': {'code': 400, 'message': 'API key not valid. Please pass a valid API key.', 'status': 'INVALID_ARGUMENT', 'details': [{'@type': 'type.googleapis.com/google.rpc.ErrorInfo', 'reason': 'API_KEY_INVALID', 'domain': 'googleapis.com', 'metadata': {'service': 'generativelanguage.googleapis.com'}}, {'@type': 'type.googleapis.com/google.rpc.LocalizedMessage', 'locale': 'en-US', 'message': 'API key not valid. Please pass a valid API key.'}]}}
+2026-07-19 11:20:41,365 INFO Database created
