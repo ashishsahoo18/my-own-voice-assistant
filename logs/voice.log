@@ -33,3 +33,74 @@
 2026-07-12 20:15:59,577 INFO End listening
 2026-07-12 20:16:09,281 INFO Start listening
 2026-07-12 20:16:16,528 INFO End listening
+2026-07-19 08:32:18,827 INFO Start listening
+2026-07-19 08:32:24,971 INFO End listening
+2026-07-19 08:32:34,959 INFO Start listening
+2026-07-19 08:32:42,699 WARNING Speech was not recognized
+2026-07-19 08:32:42,700 INFO End listening
+2026-07-19 08:33:21,573 INFO Start listening
+2026-07-19 08:33:27,182 INFO End listening
+2026-07-19 08:36:25,959 INFO Start listening
+2026-07-19 08:36:29,102 WARNING Speech was not recognized
+2026-07-19 08:36:29,103 INFO End listening
+2026-07-19 08:50:15,623 INFO Start listening
+2026-07-19 08:50:21,259 INFO End listening
+2026-07-19 08:50:27,047 INFO Start listening
+2026-07-19 08:50:34,827 INFO End listening
+2026-07-19 08:50:37,865 INFO Start listening
+2026-07-19 08:50:46,505 WARNING Voice listening timed out
+2026-07-19 08:50:46,505 INFO End listening
+2026-07-19 09:00:02,028 ERROR Wake word detection error: [WinError 10053] An established connection was aborted by the software in your host machine
+2026-07-19 09:00:13,556 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:15,379 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:21,222 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:24,942 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:28,724 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:39,611 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:41,551 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:00:55,161 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:01:02,182 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:01:07,991 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:01:12,951 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 09:01:19,601 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-07-19 10:56:24,079 INFO Wake word listener started
+2026-07-19 10:56:47,198 INFO Voice listening started
+2026-07-19 10:56:49,068 INFO Voice listening started
+2026-07-19 10:56:49,069 ERROR Listening failed: This audio source is already inside a context manager
+2026-07-19 10:56:49,069 ERROR Recognition error: Unable to access microphone: This audio source is already inside a context manager
+2026-07-19 10:56:50,864 INFO Voice listening started
+2026-07-19 10:56:50,865 ERROR Listening failed: This audio source is already inside a context manager
+2026-07-19 10:56:50,865 ERROR Recognition error: Unable to access microphone: This audio source is already inside a context manager
+2026-07-19 10:56:56,891 WARNING Speech was not recognized
+2026-07-19 10:56:56,892 INFO Voice listening completed
+2026-07-19 10:57:48,673 INFO Voice listening started
+2026-07-19 10:57:56,634 INFO Voice listening started
+2026-07-19 10:57:56,635 ERROR Listening failed: This audio source is already inside a context manager
+2026-07-19 10:57:56,635 ERROR Recognition error: Unable to access microphone: This audio source is already inside a context manager
+2026-07-19 10:57:57,262 WARNING Voice listening timed out
+2026-07-19 10:57:57,262 INFO Voice listening completed
+2026-07-19 10:58:57,304 INFO Voice listening started
+2026-07-19 10:59:05,111 INFO Voice listening completed
+2026-07-19 10:59:46,396 INFO Voice listening started
+2026-07-19 10:59:53,856 INFO Voice listening completed
+2026-07-19 11:00:18,642 INFO Voice listening started
+2026-07-19 11:00:22,833 INFO Voice listening completed
+2026-07-19 11:00:37,412 INFO Voice listening started
+2026-07-19 11:00:37,480 ERROR Wake word detection error: 'NoneType' object has no attribute 'close'
+2026-07-19 11:11:44,489 INFO Wake word listener started
+2026-07-19 11:12:09,752 INFO Voice listening started
+2026-07-19 11:12:13,578 WARNING Speech was not recognized
+2026-07-19 11:12:13,578 INFO Voice listening completed
+2026-07-19 11:12:47,656 INFO Voice listening started
+2026-07-19 11:12:55,152 INFO Voice listening completed
+2026-07-19 11:16:30,576 INFO Wake word listener started
+2026-07-19 11:16:45,174 INFO Voice listening started
+2026-07-19 11:16:50,055 INFO Voice listening completed
+2026-07-19 11:16:55,513 INFO Speech completed
+2026-07-19 11:17:07,967 INFO Voice listening started
+2026-07-19 11:17:12,912 INFO Voice listening completed
+2026-07-19 11:17:18,028 INFO Speech completed
+2026-07-19 11:20:43,663 INFO Wake word listener started
+2026-07-19 11:20:50,348 INFO Voice listening started
+2026-07-19 11:20:57,163 INFO Voice listening completed
+2026-07-19 11:21:13,433 INFO Speech completed
