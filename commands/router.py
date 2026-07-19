@@ -1,8 +1,10 @@
+"""Command router for AYRA AI automation modules."""
+
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from commands.browser import BrowserCommands
 from commands.clipboard import ClipboardCommands
@@ -33,116 +35,194 @@ class CommandRouter:
         self.logger = self._create_logger()
 
     def _create_logger(self) -> logging.Logger:
+        """Create or reuse automation logger."""
         log_path = Path(__file__).resolve().parent.parent / "logs" / "automation.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
+
         logger = logging.getLogger("ayra.automation")
         logger.setLevel(logging.INFO)
-        logger.handlers.clear()
-        handler = logging.FileHandler(log_path, encoding="utf-8")
-        handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-        logger.addHandler(handler)
+        logger.propagate = False
+
+        if not logger.handlers:
+            handler = logging.FileHandler(log_path, encoding="utf-8")
+            handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+            logger.addHandler(handler)
+
         return logger
 
     def route(self, text: str) -> str:
+        """Route text to automation command handlers.
+
+        Returns an empty string when no automation intent is found.
+        """
         lowered = text.lower().strip()
+
+        if not lowered:
+            return ""
+
         self.logger.info("Command: %s", text)
+
         try:
             if lowered.startswith("open "):
-                target = lowered[5:].strip()
-                common_urls = {
-                    "youtube": "https://www.youtube.com",
-                    "google": "https://www.google.com",
-                    "gmail": "https://mail.google.com",
-                }
-                if target in common_urls:
-                    return self.browser.open_url(common_urls[target])
-                if target == "whatsapp":
-                    return self.whatsapp.open_whatsapp()
-                if target in {"github", "linkedin", "chatgpt", "google drive"}:
-                    return self._route_browser(target)
-                return self.windows.open_app(target)
+                return self._route_open(lowered[5:].strip())
 
             if lowered.startswith("search "):
-                query = lowered[7:].strip()
-                if any(term in lowered for term in ["youtube", "github", "stack overflow", "google"]):
-                    return self._route_browser(query)
-                return self.browser.search(query)
+                return self._route_search(lowered[7:].strip())
 
-            if lowered.startswith("create folder"):
-                return self.files.create_folder(lowered.replace("create folder", "", 1).strip())
-            if lowered.startswith("delete folder"):
-                return self.files.delete_folder(lowered.replace("delete folder", "", 1).strip())
-            if lowered.startswith("create file"):
-                return self.files.create_file(lowered.replace("create file", "", 1).strip())
-            if lowered.startswith("delete file"):
-                return self.files.delete_file(lowered.replace("delete file", "", 1).strip())
+            file_result = self._route_file_commands(text, lowered)
+            if file_result:
+                return file_result
 
-            if "screenshot" in lowered:
-                return self.screenshot.take_screenshot()
+            system_result = self._route_system_commands(lowered)
+            if system_result:
+                return system_result
 
-            if lowered.startswith("copy "):
-                return self.clipboard.copy_text(text[len("copy "):].strip())
-            if lowered.startswith("paste"):
-                return self.clipboard.paste_text()
+            web_result = self._route_web_commands(lowered)
+            if web_result:
+                return web_result
 
-            if "weather" in lowered:
-                location = lowered.replace("weather", "", 1).strip() or "Delhi"
-                return self.weather.get_weather(location)
-            if "news" in lowered:
-                category = lowered.replace("news", "", 1).strip() or "technology"
-                return self.news.get_news(category)
+            windows_result = self._route_windows_commands(lowered)
+            if windows_result:
+                return windows_result
 
-            if "volume" in lowered:
-                if "up" in lowered:
-                    return self.system.volume_up()
-                if "down" in lowered:
-                    return self.system.volume_down()
-            if "mute" in lowered:
-                return self.system.mute()
-            if "shutdown" in lowered:
-                return self.system.shutdown()
-            if "restart" in lowered:
-                return self.system.restart()
-            if "sleep" in lowered:
-                return self.system.sleep()
-
-            if "whatsapp" in lowered:
-                return self.whatsapp.open_whatsapp()
-            if "lock" in lowered and "computer" in lowered:
-                return self.windows.lock_computer()
-            if "recycle" in lowered:
-                return self.windows.empty_recycle_bin()
-            if "explorer" in lowered:
-                return self.windows.restart_explorer()
-            if "downloads" in lowered or "desktop" in lowered or "documents" in lowered or "pictures" in lowered or "videos" in lowered:
-                return self.files.open_folder(lowered)
-
-            return self.browser.search(text)
+            return ""
         except Exception as exc:
-            self.logger.error("Automation error: %s", exc)
+            self.logger.exception("Automation error: %s", exc)
             return f"Automation error: {exc}"
 
-    def _route_browser(self, target: str) -> str:
-        urls = {
-            "youtube": "https://www.youtube.com",
-            "google": "https://www.google.com",
-            "gmail": "https://mail.google.com",
-            "whatsapp": "https://web.whatsapp.com",
-        }
-        if target in urls and target != "whatsapp":
-            return self.browser.open_url(urls[target])
-        if target == "whatsapp":
-            return self.whatsapp.open_whatsapp()
-        mapping = {
-            "youtube": self.browser.search_youtube,
-            "whatsapp": self.whatsapp.open_whatsapp,
-            "github": self.browser.search_github,
+    def _route_open(self, target: str) -> str:
+        """Route open commands."""
+        if not target:
+            return "What should I open?"
+
+        websites = {
+            "youtube": self.browser.open_youtube,
+            "google": self.browser.open_google,
             "gmail": self.browser.open_gmail,
+            "github": lambda: self.browser.open_site("github"),
             "linkedin": self.browser.open_linkedin,
             "chatgpt": self.browser.open_chatgpt,
             "google drive": self.browser.open_drive,
+            "drive": self.browser.open_drive,
+            "whatsapp": self.whatsapp.open_whatsapp,
+            "whatsapp web": self.whatsapp.open_whatsapp,
         }
-        handler = mapping.get(target)
-        if handler is None:
-            return self.browser.open_url(target)
-        return handler()
+
+        handler = websites.get(target)
+        if handler:
+            return handler()
+
+        return self.windows.open_app(target)
+
+    def _route_search(self, query: str) -> str:
+        """Route search commands."""
+        if not query:
+            return "What should I search?"
+
+        search_routes: list[tuple[tuple[str, ...], Callable[[str], str]]] = [
+            (("youtube",), self._search_youtube),
+            (("github",), self._search_github),
+            (("stack overflow", "stackoverflow"), self._search_stackoverflow),
+            (("google",), self._search_google),
+        ]
+
+        for keywords, handler in search_routes:
+            if any(keyword in query for keyword in keywords):
+                return handler(query)
+
+        return self.browser.search(query)
+
+    def _route_file_commands(self, text: str, lowered: str) -> str:
+        """Route file and folder commands."""
+        file_commands = {
+            "create folder": self.files.create_folder,
+            "delete folder": self.files.delete_folder,
+            "create file": self.files.create_file,
+            "delete file": self.files.delete_file,
+        }
+
+        for prefix, handler in file_commands.items():
+            if lowered.startswith(prefix):
+                path = text[len(prefix):].strip()
+                return handler(path)
+
+        folder_keywords = ["downloads", "desktop", "documents", "pictures", "videos"]
+        if any(keyword in lowered for keyword in folder_keywords):
+            return self.files.open_folder(lowered)
+
+        return ""
+
+    def _route_system_commands(self, lowered: str) -> str:
+        """Route system commands."""
+        if "screenshot" in lowered:
+            return self.screenshot.take_screenshot()
+
+        if lowered.startswith("copy "):
+            return self.clipboard.copy_text(lowered[len("copy "):].strip())
+
+        if lowered.startswith("paste"):
+            return self.clipboard.paste_text()
+
+        if "volume" in lowered:
+            if "up" in lowered or "increase" in lowered:
+                return self.system.volume_up()
+            if "down" in lowered or "decrease" in lowered:
+                return self.system.volume_down()
+
+        if "mute" in lowered:
+            return self.system.mute()
+
+        if "shutdown" in lowered:
+            return self.system.shutdown()
+
+        if "restart" in lowered:
+            return self.system.restart()
+
+        if "sleep" in lowered:
+            return self.system.sleep()
+
+        return ""
+
+    def _route_web_commands(self, lowered: str) -> str:
+        """Route weather, news, and WhatsApp commands."""
+        if "weather" in lowered:
+            location = lowered.replace("weather", "", 1).strip() or "Delhi"
+            return self.weather.get_weather(location)
+
+        if "news" in lowered:
+            category = lowered.replace("news", "", 1).strip() or "technology"
+            return self.news.get_news(category)
+
+        if "whatsapp" in lowered:
+            return self.whatsapp.open_whatsapp()
+
+        return ""
+
+    def _route_windows_commands(self, lowered: str) -> str:
+        """Route Windows-specific automation commands."""
+        if "lock" in lowered and "computer" in lowered:
+            return self.windows.lock_computer()
+
+        if "recycle" in lowered:
+            return self.windows.empty_recycle_bin()
+
+        if "restart explorer" in lowered:
+            return self.windows.restart_explorer()
+
+        return ""
+
+    def _search_youtube(self, query: str) -> str:
+        clean_query = query.replace("youtube", "").strip()
+        return self.browser.search_youtube(clean_query)
+
+    def _search_github(self, query: str) -> str:
+        clean_query = query.replace("github", "").strip()
+        return self.browser.search_github(clean_query)
+
+    def _search_stackoverflow(self, query: str) -> str:
+        clean_query = query.replace("stack overflow", "").replace("stackoverflow", "").strip()
+        return self.browser.search_stackoverflow(clean_query)
+
+    def _search_google(self, query: str) -> str:
+        clean_query = query.replace("google", "").strip()
+        return self.browser.search_google(clean_query)
