@@ -116,3 +116,18 @@
 2026-07-20 20:56:36,537 INFO Voice listening started
 2026-07-20 20:56:48,187 INFO Voice listening completed
 2026-07-20 20:56:51,698 INFO Speech completed
+2026-07-20 21:00:38,328 INFO Voice listening started
+2026-07-20 21:00:43,150 INFO Voice listening completed
+2026-07-20 21:00:46,051 INFO Speech completed
+2026-07-20 21:01:28,384 ERROR Wake word detection error: [WinError 10053] An established connection was aborted by the software in your host machine
+2026-07-20 21:03:18,773 INFO Wake word listener started
+2026-07-20 21:03:37,782 INFO Voice listening started
+2026-07-20 21:03:40,584 WARNING Speech was not recognized
+2026-07-20 21:03:40,584 INFO Voice listening completed
+2026-07-20 21:03:44,356 INFO Speech completed
+2026-07-20 21:03:44,365 INFO Voice listening started
+2026-07-20 21:03:50,826 INFO Voice listening completed
+2026-07-20 21:03:58,013 INFO Speech completed
+2026-07-20 21:04:00,017 INFO Voice listening started
+2026-07-20 21:04:07,055 INFO Voice listening completed
+2026-07-20 21:04:13,966 INFO Speech completed
