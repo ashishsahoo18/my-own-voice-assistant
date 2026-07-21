@@ -36,3 +36,36 @@ Traceback (most recent call last):
     return self.whatsapp.open_whatsapp()
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+2026-07-20 21:08:39,749 INFO Command: send WhatsApp to my message
+2026-07-20 21:08:39,750 ERROR Automation error: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+Traceback (most recent call last):
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 80, in route
+    web_result = self._route_web_commands(lowered)
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 197, in _route_web_commands
+    return self.whatsapp.open_whatsapp()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+2026-07-20 21:08:54,298 INFO Command: send WhatsApp to maa message
+2026-07-20 21:08:54,298 ERROR Automation error: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+Traceback (most recent call last):
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 80, in route
+    web_result = self._route_web_commands(lowered)
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 197, in _route_web_commands
+    return self.whatsapp.open_whatsapp()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+2026-07-20 21:09:56,324 INFO Command: send WhatsApp to Deba message hello
+2026-07-20 21:09:56,324 ERROR Automation error: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+Traceback (most recent call last):
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 80, in route
+    web_result = self._route_web_commands(lowered)
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 197, in _route_web_commands
+    return self.whatsapp.open_whatsapp()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+2026-07-20 21:11:41,242 INFO Command: send WhatsApp to Divya message
+2026-07-20 21:12:25,508 INFO Command: send WhatsApp to Deva message hay
+2026-07-20 21:14:54,324 INFO Command: send WhatsApp to Deva message
+2026-07-20 21:21:03,505 INFO Command: hey Ira
+2026-07-20 21:21:29,776 INFO Command: send message WhatsApp to Deepa hello
+2026-07-20 21:21:49,166 INFO Command: you are wrong
