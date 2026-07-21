@@ -1,41 +1,49 @@
 from __future__ import annotations
 
 import csv
-import webbrowser
+import datetime as dt
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
+
+import pywhatkit
 
 
 class WhatsAppCommands:
-    """Send WhatsApp messages using WhatsApp Web."""
+    """Send WhatsApp messages using pywhatkit."""
 
     def __init__(self, contacts_path: Optional[str] = None) -> None:
         project_root = Path(__file__).resolve().parent.parent
         self.contacts_path = Path(contacts_path) if contacts_path else project_root / "contacts.csv"
 
-    def open_whatsapp(self) -> str:
-        """Open WhatsApp Web."""
-        webbrowser.open("https://web.whatsapp.com")
-        return "Opened WhatsApp Web."
-
     def send_message(self, number: str, message: str) -> str:
-        """Open WhatsApp chat with a prepared message."""
+        """Schedule a WhatsApp message one minute from now."""
         clean_number = self._clean_number(number)
         clean_message = message.strip()
 
         if not clean_number:
             return "Please provide a WhatsApp number."
-
         if not clean_message:
             return "Please provide a message to send."
 
-        url = f"https://wa.me/{clean_number}?text={quote(clean_message)}"
-        webbrowser.open(url)
-        return f"Opened WhatsApp message for {clean_number}."
+        now = dt.datetime.now()
+        send_time = now + dt.timedelta(minutes=1)
+
+        try:
+            pywhatkit.sendwhatmsg(
+                phone_no=f"+{clean_number}",
+                message=clean_message,
+                time_hour=send_time.hour,
+                time_min=send_time.minute,
+                wait_time=15,
+                tab_close=True,
+                close_time=3,
+            )
+            return f"Sent WhatsApp message to {clean_number}."
+        except Exception as exc:
+            return f"Could not send WhatsApp message: {exc}"
 
     def send_to_contact(self, contact_name: str, message: str) -> str:
-        """Open WhatsApp chat for a saved contact."""
+        """Send a WhatsApp message to a saved contact."""
         clean_name = contact_name.lower().strip()
         contacts = self._load_contacts()
         number = contacts.get(clean_name)
