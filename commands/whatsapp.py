@@ -1,22 +1,29 @@
 from __future__ import annotations
 
 import csv
-import datetime as dt
+import time
+import webbrowser
 from pathlib import Path
 from typing import Optional
 
+import pyautogui
 import pywhatkit
 
 
 class WhatsAppCommands:
-    """Send WhatsApp messages using pywhatkit."""
+    """Send WhatsApp messages using WhatsApp Web."""
 
     def __init__(self, contacts_path: Optional[str] = None) -> None:
         project_root = Path(__file__).resolve().parent.parent
         self.contacts_path = Path(contacts_path) if contacts_path else project_root / "contacts.csv"
 
+    def open_whatsapp(self) -> str:
+        """Open WhatsApp Web."""
+        webbrowser.open("https://web.whatsapp.com")
+        return "Opened WhatsApp Web."
+
     def send_message(self, number: str, message: str) -> str:
-        """Schedule a WhatsApp message one minute from now."""
+        """Send a WhatsApp message directly."""
         clean_number = self._clean_number(number)
         clean_message = message.strip()
 
@@ -25,28 +32,26 @@ class WhatsAppCommands:
         if not clean_message:
             return "Please provide a message to send."
 
-        now = dt.datetime.now()
-        send_time = now + dt.timedelta(minutes=1)
-
         try:
-            pywhatkit.sendwhatmsg(
+            pywhatkit.sendwhatmsg_instantly(
                 phone_no=f"+{clean_number}",
                 message=clean_message,
-                time_hour=send_time.hour,
-                time_min=send_time.minute,
-                wait_time=15,
-                tab_close=True,
+                wait_time=25,
+                tab_close=False,
                 close_time=3,
             )
+
+            time.sleep(3)
+            pyautogui.press("enter")
+
             return f"Sent WhatsApp message to {clean_number}."
         except Exception as exc:
             return f"Could not send WhatsApp message: {exc}"
 
     def send_to_contact(self, contact_name: str, message: str) -> str:
         """Send a WhatsApp message to a saved contact."""
-        clean_name = contact_name.lower().strip()
         contacts = self._load_contacts()
-        number = contacts.get(clean_name)
+        number = contacts.get(contact_name.lower().strip())
 
         if not number:
             return f"Contact not found: {contact_name}"
