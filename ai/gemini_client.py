@@ -15,6 +15,19 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ClientError
 
+try:
+    from config.personality import AYRA_SYSTEM_PROMPT, OFFLINE_FALLBACK_RESPONSE
+except ImportError:
+    AYRA_SYSTEM_PROMPT = (
+        "You are AYRA AI, a premium futuristic desktop assistant for Ashish. "
+        "You are calm, confident, helpful, concise, and professional."
+    )
+    OFFLINE_FALLBACK_RESPONSE = (
+        "Gemini is temporarily unavailable, but I am still here. "
+        "I can help with apps, web search, reminders, WhatsApp, screenshots, files, "
+        "and basic calculations."
+    )
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 ENV_PATH = BASE_DIR / ".env"
@@ -27,10 +40,8 @@ LOG_DIR.mkdir(parents=True, exist_ok=True)
 logger = logging.getLogger("ayra")
 if not logger.handlers:
     logger.setLevel(logging.INFO)
-
     handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
-
     logger.addHandler(handler)
     logger.propagate = False
 
@@ -41,7 +52,7 @@ class GeminiClient:
     def __init__(self) -> None:
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
         self.model = self._resolve_model_name()
-        self.system_prompt = self._build_system_prompt()
+        self.system_prompt = AYRA_SYSTEM_PROMPT
         self.client: Optional[genai.Client] = None
 
         if self.api_key:
@@ -53,10 +64,8 @@ class GeminiClient:
             logger.error("Gemini client is not configured")
             return self._configuration_error_message()
 
-        trimmed_history = self._trim_history(history)
-
         try:
-            contents = self._build_contents(prompt, trimmed_history)
+            contents = self._build_contents(prompt, self._trim_history(history))
             response = self.client.models.generate_content(
                 model=self.model,
                 contents=contents,
@@ -66,18 +75,18 @@ class GeminiClient:
                     top_p=0.95,
                 ),
             )
-            return self._extract_text(response)
+            return self._extract_text(response) or OFFLINE_FALLBACK_RESPONSE
         except ClientError as exc:
             return self._handle_client_error(exc)
         except (socket.timeout, TimeoutError) as exc:
             logger.exception("Gemini request timed out: %s", exc)
-            return "The AI request timed out. Please try again."
+            return OFFLINE_FALLBACK_RESPONSE
         except (ConnectionError, OSError, socket.gaierror) as exc:
             logger.exception("Gemini network error: %s", exc)
-            return "Unable to connect to the AI service. Please check your internet connection."
+            return OFFLINE_FALLBACK_RESPONSE
         except Exception as exc:
             logger.exception("Unexpected Gemini failure: %s", exc)
-            return "The AI service is temporarily unavailable."
+            return OFFLINE_FALLBACK_RESPONSE
 
     def stream(self, prompt: str, history: Optional[list[dict]] = None) -> Generator[str, None, None]:
         """Yield Gemini response chunks for streaming UIs."""
@@ -85,10 +94,8 @@ class GeminiClient:
             yield self._configuration_error_message()
             return
 
-        trimmed_history = self._trim_history(history)
-
         try:
-            contents = self._build_contents(prompt, trimmed_history)
+            contents = self._build_contents(prompt, self._trim_history(history))
             response_stream = self.client.models.generate_content_stream(
                 model=self.model,
                 contents=contents,
@@ -99,60 +106,41 @@ class GeminiClient:
                 ),
             )
 
+            yielded = False
             for chunk in response_stream:
                 text = self._extract_text(chunk)
                 if text:
+                    yielded = True
                     yield text
+
+            if not yielded:
+                yield OFFLINE_FALLBACK_RESPONSE
         except ClientError as exc:
             yield self._handle_client_error(exc)
-        except (socket.timeout, TimeoutError):
-            yield "The AI request timed out. Please try again."
-        except (ConnectionError, OSError, socket.gaierror):
-            yield "Unable to connect to the AI service. Please check your internet connection."
         except Exception as exc:
             logger.exception("Unexpected Gemini streaming failure: %s", exc)
-            yield "The AI service is temporarily unavailable."
+            yield OFFLINE_FALLBACK_RESPONSE
 
     @property
     def _is_configured(self) -> bool:
-        """Return True when the Gemini client can make requests."""
         return bool(self.api_key and self.client)
 
-    def _build_system_prompt(self) -> str:
-        """Create AYRA's system prompt."""
-        return (
-            "You are AYRA AI, a premium futuristic desktop assistant for Ashish. "
-            "You are friendly, concise, practical, and highly capable. "
-            "You help with coding, debugging, Python, Windows automation, productivity, "
-            "file summaries, learning, reminders, notes, web search guidance, and general conversation. "
-            "When the user asks for code, provide clean Python 3.13 code with type hints when useful. "
-            "When something is uncertain, say so clearly. "
-            "Keep answers helpful and direct unless the user asks for deep detail."
-        )
-
     def _resolve_model_name(self) -> str:
-        """Resolve Gemini model from environment."""
         configured = os.getenv("GEMINI_MODEL", "").strip()
-
         if configured.startswith("gemini-"):
             return configured
-
         return "gemini-1.5-flash"
 
     def _configuration_error_message(self) -> str:
-        """Return a helpful message for missing API configuration."""
         return "Gemini is not configured. Add GEMINI_API_KEY to your .env file."
 
     def _quota_error_message(self) -> str:
-        """Return a quota-specific Gemini error message."""
-        retry_delay = "Please wait and try again later."
         return (
-            "Gemini quota limit reached. "
-            f"{retry_delay} You can also reduce message size or use a paid API key."
+            "Gemini quota limit reached. Please wait and try again later. "
+            "You can also reduce message size or use a paid API key."
         )
 
     def _handle_client_error(self, exc: ClientError) -> str:
-        """Map Gemini client errors to user-friendly messages."""
         status_code = self._extract_status_code(exc)
         logger.exception("Gemini ClientError: %s", exc)
 
@@ -168,13 +156,9 @@ class GeminiClient:
         if status_code == 404:
             return f"The Gemini model '{self.model}' was not found. Check GEMINI_MODEL in .env."
 
-        if status_code == 500:
-            return "Gemini is temporarily unavailable."
-
-        return "Gemini is temporarily unavailable."
+        return OFFLINE_FALLBACK_RESPONSE
 
     def _is_quota_error(self, exc: Exception) -> bool:
-        """Return True when Gemini indicates a quota/rate-limit problem."""
         status_code = self._extract_status_code(exc)
         if status_code == 429:
             return True
@@ -191,7 +175,6 @@ class GeminiClient:
         return any(token in message for token in quota_tokens)
 
     def _trim_history(self, history: Optional[list[dict]]) -> list[dict]:
-        """Keep recent conversation history small for context control."""
         if not history:
             return []
 
@@ -204,27 +187,22 @@ class GeminiClient:
             role = item.get("role", "user")
             text = str(item.get("content", "")).strip()
 
-            if not text:
-                continue
-
-            trimmed_items.append(
-                {
-                    "role": role,
-                    "content": self._shorten_text(text),
-                }
-            )
+            if text:
+                trimmed_items.append(
+                    {
+                        "role": role,
+                        "content": self._shorten_text(text),
+                    }
+                )
 
         return trimmed_items
 
     def _shorten_text(self, text: str, max_chars: int = 320) -> str:
-        """Shorten long history items."""
         if len(text) <= max_chars:
             return text
-
         return text[: max_chars - 3].rstrip() + "..."
 
     def _build_contents(self, prompt: str, history: Optional[list[dict]]) -> list[dict]:
-        """Build Gemini content payload from prompt and chat history."""
         contents: list[dict] = []
 
         if history:
@@ -252,7 +230,6 @@ class GeminiClient:
         return contents
 
     def _extract_text(self, response: object) -> str:
-        """Extract text from Gemini response objects."""
         text = getattr(response, "text", None)
         if isinstance(text, str) and text.strip():
             return text.strip()
@@ -270,8 +247,7 @@ class GeminiClient:
 
         return ""
 
-    def _extract_status_code(self, exc: ClientError) -> Optional[int]:
-        """Extract HTTP status from Gemini exceptions."""
+    def _extract_status_code(self, exc: Exception) -> Optional[int]:
         for attr in ("status_code", "code", "http_status"):
             value = getattr(exc, attr, None)
             if isinstance(value, int):
@@ -286,7 +262,6 @@ class GeminiClient:
         return None
 
     def _extract_retry_delay(self, exc: ClientError) -> float:
-        """Extract retry delay from Gemini errors when present."""
         for attr in ("retry_delay", "retry_after", "delay"):
             value = getattr(exc, attr, None)
             if isinstance(value, (int, float)):
@@ -309,15 +284,8 @@ client = GeminiClient()
 
 
 def generate_ai_response(prompt: str, history: list[dict[str, str]] | None = None) -> str:
-    """Generate a response from Gemini, with offline fallback."""
-    try:
-        return ask_ai(prompt, history=history)
-    except Exception:
-        return (
-            "Gemini is temporarily unavailable, but I am still here. "
-            "I can help with opening apps, searching the web, reminders, notes, "
-            "screenshots, files, and basic calculations."
-        )
+    """Generate a response from Gemini."""
+    return client.ask(prompt=prompt, history=history)
 
 
 def stream_ai_response(
@@ -330,4 +298,4 @@ def stream_ai_response(
 
 def ask_ai(prompt: str, history: Optional[list[dict]] = None) -> str:
     """Backward-compatible wrapper for Gemini responses."""
-    return generate_ai_response(prompt=prompt, history=history)
+    return client.ask(prompt=prompt, history=history)
