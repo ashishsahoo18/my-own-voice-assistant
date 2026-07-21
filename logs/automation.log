@@ -15,3 +15,24 @@
 2026-07-19 11:16:50,559 INFO Command: nayara
 2026-07-19 11:17:13,349 INFO Command: aira what are you doing
 2026-07-19 11:20:57,582 INFO Command: Tera what are you doing
+2026-07-20 20:47:18,953 INFO Command: hlo
+2026-07-20 20:55:12,957 INFO Command: send WhatsApp
+2026-07-20 20:56:48,779 INFO Command: send WhatsApp to my message hello
+2026-07-20 21:03:51,264 INFO Command: send WhatsApp to my message
+2026-07-20 21:03:51,265 ERROR Automation error: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+Traceback (most recent call last):
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 80, in route
+    web_result = self._route_web_commands(lowered)
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 197, in _route_web_commands
+    return self.whatsapp.open_whatsapp()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+2026-07-20 21:04:07,439 INFO Command: send WhatsApp to maa message hello
+2026-07-20 21:04:07,439 ERROR Automation error: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
+Traceback (most recent call last):
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 80, in route
+    web_result = self._route_web_commands(lowered)
+  File "C:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant\commands\router.py", line 197, in _route_web_commands
+    return self.whatsapp.open_whatsapp()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
