@@ -167,3 +167,37 @@
 2026-07-20 21:23:16,973 INFO Speech completed
 2026-07-20 21:23:20,529 INFO Voice listening completed
 2026-07-20 21:23:28,465 INFO Speech completed
+2026-08-07 18:43:12,943 INFO Wake word listener started
+2026-08-07 18:43:18,516 INFO Voice listening started
+2026-08-07 18:43:21,637 INFO Voice listening completed
+2026-08-07 18:43:36,827 INFO Voice listening started
+2026-08-07 18:43:47,832 INFO Wake word listener started
+2026-08-07 18:43:55,157 INFO Voice listening started
+2026-08-07 18:44:01,154 INFO Voice listening completed
+2026-08-07 18:44:15,505 INFO Speech completed
+2026-08-07 18:44:32,877 INFO Speech completed
+2026-08-07 18:45:06,316 INFO Voice listening started
+2026-08-07 18:45:10,390 WARNING Speech was not recognized
+2026-08-07 18:45:10,391 INFO Voice listening completed
+2026-08-07 18:45:14,080 INFO Speech completed
+2026-08-07 18:45:21,752 INFO Voice listening started
+2026-08-07 18:45:30,654 WARNING Voice listening timed out
+2026-08-07 18:45:30,656 INFO Voice listening completed
+2026-08-07 18:45:34,433 INFO Speech completed
+2026-08-07 18:46:14,813 INFO Wake word listener started
+2026-08-07 18:46:50,280 INFO Speech completed
+2026-08-07 18:46:52,311 INFO Speech completed
+2026-08-07 18:46:52,815 INFO Voice listening started
+2026-08-07 18:46:54,677 INFO Voice listening started
+2026-08-07 18:46:54,680 ERROR Listening failed: This audio source is already inside a context manager
+2026-08-07 18:46:54,681 ERROR Recognition error: Unable to access microphone: This audio source is already inside a context manager
+2026-08-07 18:46:57,898 INFO Speech completed
+2026-08-07 18:46:59,080 INFO Voice listening started
+2026-08-07 18:46:59,080 ERROR Listening failed: This audio source is already inside a context manager
+2026-08-07 18:46:59,081 ERROR Recognition error: Unable to access microphone: This audio source is already inside a context manager
+2026-08-07 18:47:01,771 WARNING Voice listening timed out
+2026-08-07 18:47:01,772 INFO Voice listening completed
+2026-08-07 18:47:02,616 INFO Speech completed
+2026-08-07 18:47:06,191 INFO Speech completed
+2026-08-07 18:47:29,986 INFO Speech completed
+2026-08-07 18:48:00,700 INFO Speech completed
