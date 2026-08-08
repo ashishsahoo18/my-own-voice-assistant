@@ -11,6 +11,7 @@ from typing import Optional
 import customtkinter as ctk
 
 from ai.assistant import AyraAssistant
+from ai.gemini_client import client as gemini_client
 from database.chat_db import ChatStore
 from voice.voice_manager import VoiceManager
 
@@ -320,7 +321,12 @@ class ChatPanel(ctk.CTkFrame):
         self._request_in_flight = True
         self._set_busy_state(True)
         self._show_typing_indicator()
-        self._set_status("Thinking")
+        if self.assistant.should_use_google_search(message):
+            self._set_status("SEARCHING GOOGLE...")
+            self._searching_google = True
+        else:
+            self._set_status("Thinking")
+            self._searching_google = False
 
         self._thinking_timer_id = self.after(2000, self._show_delayed_thinking_indicator)
 
@@ -335,8 +341,16 @@ class ChatPanel(ctk.CTkFrame):
         """Run assistant request in a background thread."""
         try:
             reply = self.assistant.handle(message)
-        except Exception:
-            reply = self._friendly_error_message()
+        except Exception as exc:
+            import traceback
+
+            print("AYRA AI ERROR:", repr(exc))
+            traceback.print_exc()
+            self.after(0, self._set_status, "OFFLINE")
+            reply = "Gemini unavailable. Switching to offline mode."
+
+        if getattr(self, "_searching_google", False) or getattr(self.assistant, "used_google_search", False):
+            self.after(0, self._set_status, "ANSWER READY")
 
         self.after(0, self._start_streaming_reply, reply)
 
