@@ -48,7 +48,25 @@ class AyraAssistant:
         self.reminders = ReminderCommands()
         self.system = SystemCommands()
         self.router = CommandRouter()
+def _extract_folder_name(self, text: str) -> str:
+    """Extract folder name from natural language."""
+    lowered = text.lower()
 
+    patterns = [
+        r"create a folder(?: named| name| called)?\s+(.+)",
+        r"create folder(?: named| name| called)?\s+(.+)",
+        r"make folder(?: named| name| called)?\s+(.+)",
+        r"folder name(?: is)?\s+(.+)",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, lowered)
+        if match:
+            name = match.group(1).strip()
+            name = name.replace("save ", "").strip()
+            return name
+
+    return ""
     def handle(self, message: str) -> str:
         """Handle a user message and return AYRA's response."""
         text = message.strip()
@@ -66,7 +84,7 @@ class AyraAssistant:
             return memory_response
 
         return self._handle_ai_chat(text)
-
+    
     def _handle_commands(self, text: str, lowered: str) -> str | None:
         """Handle deterministic desktop, browser, weather, and calculator commands."""
         if lowered.startswith("open "):
@@ -112,13 +130,17 @@ class AyraAssistant:
         if "screenshot" in lowered:
             return self.system.take_screenshot()
 
-        if "create folder" in lowered:
-            path = text.split("create folder", 1)[1].strip()
-            return self.system.create_folder(path)
+        if "create folder" in lowered or "create a folder" in lowered or "make folder" in lowered:
+            folder_name = self._extract_folder_name(text)
+            if not folder_name:
+                return "Please tell me the folder name. Example: create folder ashish"
+            return self.system.create_folder(folder_name)
 
-        if "create file" in lowered:
-            path = text.split("create file", 1)[1].strip()
-            return self.system.create_file(path)
+        if "create file" in lowered or "create a file" in lowered or "make file" in lowered:
+            file_name = self._extract_file_name(text)
+            if not file_name:
+                return "Please tell me the file name. Example: create file document.txt"
+            return self.system.create_file(file_name)
 
         if self._looks_like_math(lowered):
             return self.calculator.evaluate(text)
