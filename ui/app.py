@@ -5,6 +5,7 @@ from __future__ import annotations
 import customtkinter as ctk
 
 from ai.assistant import AyraAssistant
+from ai.gemini_client import client as gemini_client
 from config.settings import AppSettings
 from database.chat_db import ChatStore
 from ui.chat import ChatPanel
@@ -38,6 +39,8 @@ class AyraApp(ctk.CTk):
         self._configure_window()
         self._build_layout()
         self._update_startup_status()
+        # Start monitoring Gemini health/status (quota/exhaustion)
+        self.after(2000, self._monitor_gemini_status)
 
     def _configure_window(self) -> None:
         """Configure the root window grid and theme colors."""
@@ -386,6 +389,22 @@ class AyraApp(ctk.CTk):
             self.status_var.set("● ONLINE")
         else:
             self.status_var.set("● NEEDS API KEY")
+
+    def _monitor_gemini_status(self) -> None:
+        """Periodic check to reflect Gemini client's quota/exhaustion state in the UI."""
+        try:
+            if getattr(gemini_client, "quota_exhausted", False):
+                self.status_var.set("● OFFLINE")
+            else:
+                if self.settings.is_gemini_configured:
+                    self.status_var.set("● ONLINE")
+                else:
+                    self.status_var.set("● NEEDS API KEY")
+        except Exception:
+            # Keep current status if anything goes wrong
+            pass
+        finally:
+            self.after(3000, self._monitor_gemini_status)
 
     def open_voice_settings(self) -> None:
         """Open the voice settings window."""
