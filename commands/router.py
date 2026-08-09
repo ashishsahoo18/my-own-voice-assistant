@@ -146,6 +146,37 @@ class CommandRouter:
                 path = text[len(prefix):].strip()
                 return handler(path)
 
+        if lowered.startswith("open "):
+            target = lowered[len("open "):].strip()
+            if any(keyword in target for keyword in ["folder", "desktop", "documents", "downloads", "pictures", "videos"]):
+                return self.files.open_folder(target)
+            return self.files.open_file(target)
+
+        if "open the" in lowered or "open" in lowered and any(keyword in lowered for keyword in ["folder", "file"]):
+            return self.files.open_folder(lowered)
+
+        if "list files" in lowered or "list folder" in lowered or "show files" in lowered:
+            path = text.split("in", 1)[-1].strip() if " in " in lowered else ""
+            return self.files.list_folder(path)
+
+        if "rename file" in lowered or "rename folder" in lowered:
+            parts = lowered.replace("rename file", "").replace("rename folder", "").split(" to ")
+            if len(parts) == 2:
+                return self.files.rename_file(parts[0].strip(), parts[1].strip())
+            return "Please provide a source and target name to rename."
+
+        if "copy file" in lowered or "copy folder" in lowered:
+            parts = lowered.replace("copy file", "").replace("copy folder", "").split(" to ")
+            if len(parts) == 2:
+                return self.files.copy_file(parts[0].strip(), parts[1].strip())
+            return "Please provide a source and destination for copying."
+
+        if "move file" in lowered or "move folder" in lowered:
+            parts = lowered.replace("move file", "").replace("move folder", "").split(" to ")
+            if len(parts) == 2:
+                return self.files.move_file(parts[0].strip(), parts[1].strip())
+            return "Please provide a source and destination for moving."
+
         folder_keywords = ["downloads", "desktop", "documents", "pictures", "videos"]
         if any(keyword in lowered for keyword in folder_keywords):
             return self.files.open_folder(lowered)
