@@ -263,3 +263,11 @@
 2026-08-07 22:45:15,446 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
 2026-08-07 22:45:17,917 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
 2026-08-07 22:45:20,159 ERROR Wake word detection error: recognition connection failed: [Errno 11001] getaddrinfo failed
+2026-08-08 20:04:02,657 INFO Wake word listener started
+2026-08-08 20:04:26,259 INFO Voice listening started
+2026-08-08 20:04:36,458 INFO Voice listening completed
+2026-08-08 20:04:49,570 INFO Speech completed
+2026-08-08 20:07:48,737 INFO Wake word listener started
+2026-08-08 20:09:13,290 INFO Voice listening started
+2026-08-08 20:09:26,958 INFO Voice listening completed
+2026-08-08 20:09:38,838 INFO Speech completed
