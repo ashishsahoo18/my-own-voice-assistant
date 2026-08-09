@@ -174,6 +174,41 @@ class FileCommands:
 
         return f"I do not recognize the folder: {folder}."
 
+    def open_file(self, path: str) -> str:
+        """Open a file with the default application."""
+        file_path = self._clean_path(path)
+
+        if file_path is None:
+            return "Please provide a valid file path."
+
+        if not file_path.exists() or not file_path.is_file():
+            return f"File not found: {file_path}"
+
+        try:
+            os.startfile(str(file_path))
+            return f"Opened {file_path}."
+        except Exception as exc:
+            return f"Could not open file {file_path}: {exc}"
+
+    def list_folder(self, path: str) -> str:
+        """List files and folders in a directory."""
+        folder_path = self._clean_path(path)
+
+        if folder_path is None:
+            return "Please provide a folder path."
+
+        if not folder_path.exists() or not folder_path.is_dir():
+            return f"Folder not found: {folder_path}"
+
+        entries = sorted(folder_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower()))
+        if not entries:
+            return f"No files or folders found in {folder_path}."
+
+        visible = entries[:20]
+        names = [f"{item.name}/" if item.is_dir() else item.name for item in visible]
+        suffix = " and more" if len(entries) > len(visible) else ""
+        return f"Contents of {folder_path}: {', '.join(names)}{suffix}."
+
     def search_files(self, query: str, max_results: int = 10) -> str:
         """Search common user folders for matching files."""
         clean_query = query.strip().lower()
@@ -215,4 +250,8 @@ class FileCommands:
             return None
 
         expanded = os.path.expandvars(os.path.expanduser(clean_path))
+        # If user provided a simple name (no separators or drive), default to Desktop
+        if not any(sep in expanded for sep in ("/","\\",":")) and not expanded.startswith("~"):
+            return Path.home() / "Desktop" / expanded
+
         return Path(expanded)
