@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
 from urllib.parse import quote_plus
-
 import requests
 from bs4 import BeautifulSoup
 
@@ -176,6 +176,47 @@ class AyraAssistant:
         if "screenshot" in lowered:
             return self.system.take_screenshot()
 
+        # Support compound commands like: "Create a folder named Ashish on my Desktop and create a file named Ayra.py inside it."
+        if " and " in lowered and ("create folder" in lowered or "make folder" in lowered) and ("create file" in lowered or "make file" in lowered):
+            # split into parts and attempt to process folder then file
+            parts = [p.strip() for p in text.split(" and ", 1)]
+            folder_resp = None
+            file_resp = None
+
+            # find folder part
+            for part in parts:
+                if any(kw in part.lower() for kw in ("create folder", "create a folder", "make folder")):
+                    folder_name = self._extract_folder_name(part)
+                    if folder_name:
+                        folder_resp = self.system.create_folder(folder_name)
+            # find file part and respect 'it' references
+            for part in parts:
+                if any(kw in part.lower() for kw in ("create file", "create a file", "make file")):
+                    filename, folder_hint = self._extract_file_name(part)
+                    if not filename:
+                        continue
+                    if folder_hint and folder_hint.strip() == "it":
+                        if folder_name:
+                            target_path = str(Path.home() / "Desktop" / folder_name / filename)
+                        else:
+                            target_path = str(Path.home() / "Desktop" / filename)
+                    elif folder_hint:
+                        if folder_hint.strip().lower() == "desktop":
+                            target_path = str(Path.home() / "Desktop" / filename)
+                        else:
+                            target_path = str(Path.home() / "Desktop" / folder_hint.strip() / filename)
+                    else:
+                        target_path = str(Path.home() / "Desktop" / filename)
+
+                    file_resp = self.system.create_file(target_path)
+
+            results = []
+            if folder_resp:
+                results.append(folder_resp)
+            if file_resp:
+                results.append(file_resp)
+            return " ".join(results) if results else None
+
         if "create folder" in lowered or "create a folder" in lowered or "make folder" in lowered:
             folder_name = self._extract_folder_name(text)
             if not folder_name:
@@ -183,10 +224,17 @@ class AyraAssistant:
             return self.system.create_folder(folder_name)
 
         if "create file" in lowered or "create a file" in lowered or "make file" in lowered:
-            file_name = self._extract_file_name(text)
-            if not file_name:
+            filename, folder_hint = self._extract_file_name(text)
+            if not filename:
                 return "Please tell me the file name. Example: create file document.txt"
-            return self.system.create_file(file_name)
+            # Build target path if folder hint present
+            if folder_hint:
+                if folder_hint.strip().lower() == "desktop":
+                    target = str(Path.home() / "Desktop" / filename)
+                else:
+                    target = str(Path.home() / "Desktop" / folder_hint.strip() / filename)
+                return self.system.create_file(target)
+            return self.system.create_file(filename)
 
         if self._looks_like_math(lowered):
             return self.calculator.evaluate(text)
@@ -211,9 +259,46 @@ class AyraAssistant:
         for pattern in patterns:
             match = re.search(pattern, lowered)
             if match:
-                return match.group(1).strip()
+                name = match.group(1).strip()
+                # remove common location qualifiers
+                for suffix in (" on my desktop", " on desktop", " in my desktop", " in desktop", " on the desktop"):
+                    if name.endswith(suffix):
+                        name = name[: -len(suffix)].strip()
+                # remove trailing punctuation
+                return name.strip().strip("." )
 
         return ""
+
+    def _extract_file_name(self, text: str) -> tuple[str, str | None]:
+        """Extract filename and optional folder from natural language.
+
+        Returns (filename, folder) where folder may be None or a simple name like 'Ashish' or 'Desktop'.
+        """
+        patterns = [
+            r"(?:create|make) (?:a )?file(?: named| called)?\s+['\"]?(?P<filename>.+?)['\"]?(?:\s+(?:inside|in)\s+(?:the\s+)?(?P<folder>[^\.]+))?$",
+            r"(?:create|make) (?:a )?python file(?: named| called)?\s+['\"]?(?P<filename>.+?)['\"]?(?:\s+(?:inside|in)\s+(?:the\s+)?(?P<folder>[^\.]+))?$",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                filename = match.group("filename").strip()
+                folder = match.group("folder")
+                if folder:
+                    folder = folder.strip().lower()
+                    for suffix in (" folder", " on my desktop", " on desktop", " in my desktop", " in desktop", " on the desktop"):
+                        if folder.endswith(suffix):
+                            folder = folder[: -len(suffix)].strip()
+                    if folder == "it":
+                        folder = "it"
+                return filename, folder
+
+        # Fallback: look for a bare filename pattern without folder context
+        match = re.search(r"([\w\-. ]+\.[a-zA-Z0-9]+)", text)
+        if match:
+            return match.group(1).strip(), None
+
+        return "", None
 
     def _handle_memory_commands(self, text: str, lowered: str) -> str | None:
         """Handle notes, reminders, and profile learning commands."""
@@ -267,7 +352,7 @@ class AyraAssistant:
         if self._should_search_google(text):
             response = self._search_google_and_answer(
                 text,
-                note="Gemini is unavailable, so I'm searching Google for the answer.",
+                note="Gemini is temporarily unavailable, so I'll search Google for the answer.",
             )
             self.used_google_search = True
             self.memory.add_user_message(text)
@@ -283,12 +368,15 @@ class AyraAssistant:
         except GeminiQuotaExceeded:
             response = self._search_google_and_answer(
                 text,
-                note="Gemini is unavailable, so I'm searching Google for the answer.",
+                note="Gemini is temporarily unavailable, so I'll search Google for the answer.",
             )
             self.used_google_search = True
         except Exception:
-            response = "I am sorry, I could not process that request right now."
-            self.used_google_search = False
+            response = self._search_google_and_answer(
+                text,
+                note="I couldn't use Gemini right now, so I'm checking Google for the answer.",
+            )
+            self.used_google_search = True
 
         self.memory.add_user_message(text)
         self.memory.add_assistant_message(response)
@@ -411,8 +499,20 @@ class AyraAssistant:
                             break
 
         if not snippets:
+            # Try more general result snippets if featured answers are not present.
+            for result in soup.select("div.g"):
+                snippet = result.select_one("div.IsZvec, span.aCOpRe, div.BNeawe.s3v9rd.AP7Wnd")
+                if snippet:
+                    text = " ".join(snippet.stripped_strings)
+                    if len(text) >= 40 and text not in snippets:
+                        snippets.append(text)
+                        if len(snippets) >= 2:
+                            break
+
+        if not snippets:
             return ""
 
+        # Prefer the first two non-empty snippets for a concise answer.
         return " ".join(snippets[:2])
 
     def _learn_from_text(self, text: str) -> None:
