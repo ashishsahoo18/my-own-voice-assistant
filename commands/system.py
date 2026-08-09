@@ -119,24 +119,35 @@ class SystemCommands:
             return f"Could not take a screenshot: {exc}"
 
     def create_folder(self, path: str) -> str:
-        """Create a folder."""
+        """Create a folder. Defaults to Desktop when a simple name is provided."""
         clean_path = path.strip()
         if not clean_path:
             return "Please provide a folder path."
 
-        Path(clean_path).mkdir(parents=True, exist_ok=True)
-        return f"Created folder at {clean_path}."
+        # If the user provided a simple name (no separators, no drive), default to Desktop
+        if not any(sep in clean_path for sep in ("/","\\",":")) and not clean_path.startswith("~"):
+            target = Path.home() / "Desktop" / clean_path
+        else:
+            target = Path(clean_path)
+
+        target.mkdir(parents=True, exist_ok=True)
+        return f"Created folder at {target}."
 
     def create_file(self, path: str) -> str:
-        """Create a file."""
+        """Create a file. Defaults to Desktop when only a filename is provided."""
         clean_path = path.strip()
         if not clean_path:
             return "Please provide a file path."
 
-        file_path = Path(clean_path)
+        # If user passed a simple filename without separators, place it on Desktop
+        if not any(sep in clean_path for sep in ("/","\\",":")) and not clean_path.startswith("~"):
+            file_path = Path.home() / "Desktop" / clean_path
+        else:
+            file_path = Path(clean_path)
+
         file_path.parent.mkdir(parents=True, exist_ok=True)
         file_path.touch(exist_ok=True)
-        return f"Created file at {clean_path}."
+        return f"Created file at {file_path}."
 
     def calculate(self, expression: str) -> str:
         """Evaluate a simple math expression."""
