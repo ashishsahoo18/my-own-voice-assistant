@@ -21,13 +21,11 @@ from commands.router import CommandRouter
 from commands.system import SystemCommands
 
 
-def google_search_answer(query: str, system: SystemCommands | None = None) -> str:
+def google_search_answer(query: str) -> str:
     clean_query = query.strip()
     if not clean_query:
         return "Please ask a question so I can search Google."
 
-    search_system = system or SystemCommands()
-    search_system.search_google(clean_query)
     summary = fetch_google_search_summary(clean_query)
     if summary:
         return f"{summary}\n\nSource: Google search results"
@@ -35,27 +33,33 @@ def google_search_answer(query: str, system: SystemCommands | None = None) -> st
 
 
 def fetch_google_search_summary(query: str) -> str:
-    url = f"https://www.google.com/search?q={quote_plus(query)}&hl=en"
+    url = f"https://www.google.com/search?hl=en&gl=us&pws=0&safe=off&q={quote_plus(query)}"
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/121.0.0.0 Safari/537.36"
         ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+        "Referer": "https://www.google.com/",
+        "Connection": "keep-alive",
     }
 
-    response = requests.get(url, headers=headers, timeout=12)
+    response = requests.get(url, headers=headers, timeout=15)
     response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
     snippets: list[str] = []
     selectors = [
-        'div[data-attrid="wa:/description"]',
-        'div[data-attrid="kc:/knowledge_open_link"]',
-        'div.BNeawe.s3v9rd.AP7Wnd',
-        'div.IsZvec',
-        'span.aCOpRe',
+        'div[data-attrid^="wa:"]',
+        'div[data-attrid^="kc:"]',
+        'div[class*="BNeawe"]',
+        'div[class*="IsZvec"]',
+        'span[class*="aCOpRe"]',
+        'div[jsname="LwH6nd"]',
+        'div[jsname="r5hl4d"]',
     ]
 
     for selector in selectors:
@@ -66,13 +70,22 @@ def fetch_google_search_summary(query: str) -> str:
 
     if not snippets:
         for result in soup.select("div.g"):
-            snippet = result.select_one("div.IsZvec, span.aCOpRe")
+            snippet = result.select_one("div.IsZvec, span.aCOpRe, div.BNeawe.s3v9rd.AP7Wnd")
             if snippet:
                 text = " ".join(snippet.stripped_strings)
                 if len(text) >= 40 and text not in snippets:
                     snippets.append(text)
                     if len(snippets) >= 2:
                         break
+
+    if not snippets:
+        # As a last resort, gather longer text from result blocks.
+        for result in soup.select("div.g"):
+            text = " ".join(result.stripped_strings)
+            if 80 <= len(text) <= 600 and text not in snippets:
+                snippets.append(text)
+                if len(snippets) >= 2:
+                    break
 
     if not snippets:
         return ""
@@ -350,10 +363,7 @@ class AyraAssistant:
         prompt = text if not prompt_context else f"{prompt_context}\nUser: {text}"
 
         if self._should_search_google(text):
-            response = self._search_google_and_answer(
-                text,
-                note="Gemini is temporarily unavailable, so I'll search Google for the answer.",
-            )
+            response = self._search_google_and_answer(text)
             self.used_google_search = True
             self.memory.add_user_message(text)
             self.memory.add_assistant_message(response)
@@ -366,16 +376,10 @@ class AyraAssistant:
             )
             self.used_google_search = False
         except GeminiQuotaExceeded:
-            response = self._search_google_and_answer(
-                text,
-                note="Gemini is temporarily unavailable, so I'll search Google for the answer.",
-            )
+            response = self._search_google_and_answer(text)
             self.used_google_search = True
         except Exception:
-            response = self._search_google_and_answer(
-                text,
-                note="I couldn't use Gemini right now, so I'm checking Google for the answer.",
-            )
+            response = self._search_google_and_answer(text)
             self.used_google_search = True
 
         self.memory.add_user_message(text)
@@ -384,9 +388,6 @@ class AyraAssistant:
 
     def _should_search_google(self, text: str) -> bool:
         """Detect if a general knowledge question should use Google search."""
-        if self._is_gemini_available():
-            return False
-
         return self._is_general_knowledge_question(text)
 
     def should_use_google_search(self, text: str) -> bool:
@@ -412,6 +413,7 @@ class AyraAssistant:
             "who created",
             "who invented",
             "who made",
+            "tell me about",
             "explain",
             "how does",
             "how do",
@@ -433,87 +435,27 @@ class AyraAssistant:
         ]):
             return True
 
+        if "tell me about" in lowered:
+            return True
+
         return False
 
-    def _search_google_and_answer(self, query: str, note: str | None = None) -> str:
+    def _search_google_and_answer(self, query: str) -> str:
         clean_query = query.strip()
         if not clean_query:
             return "Please ask a question so I can search Google."
 
         try:
-            opening_message = f"{note}\n\n" if note else ""
-            # Open the browser search so the user can see Google results.
-            self.system.search_google(clean_query)
-            summary = self._fetch_google_search_summary(clean_query)
+            summary = fetch_google_search_summary(clean_query)
             if summary:
-                return f"{opening_message}{summary}\n\nSource: Google search results"
-            return f"{opening_message}I couldn't find a reliable answer for that search."
+                return f"{summary}\n\nSource: Google search results"
+            return "I couldn't find a reliable answer for that search."
         except Exception as exc:
             import traceback
 
             print("AYRA GOOGLE SEARCH ERROR:", repr(exc))
             traceback.print_exc()
-            return "Google search is currently unavailable."
-
-    def _fetch_google_search_summary(self, query: str) -> str:
-        url = f"https://www.google.com/search?q={quote_plus(query)}&hl=en"
-        headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/121.0.0.0 Safari/537.36"
-            ),
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-
-        response = requests.get(url, headers=headers, timeout=12)
-        response.raise_for_status()
-
-        soup = BeautifulSoup(response.text, "html.parser")
-        snippets: list[str] = []
-
-        # First try the knowledge panel or featured snippet text.
-        selectors = [
-            'div[data-attrid="wa:/description"]',
-            'div[data-attrid="kc:/knowledge_open_link"]',
-            'div.BNeawe.s3v9rd.AP7Wnd',
-            'div.IsZvec',
-            'span.aCOpRe',
-        ]
-
-        for selector in selectors:
-            for element in soup.select(selector):
-                text = " ".join(element.stripped_strings)
-                if len(text) >= 40 and text not in snippets:
-                    snippets.append(text)
-
-        # If no featured snippets were found, scan search result snippets.
-        if not snippets:
-            for result in soup.select("div.g"):
-                snippet = result.select_one("div.IsZvec, span.aCOpRe")
-                if snippet:
-                    text = " ".join(snippet.stripped_strings)
-                    if len(text) >= 40 and text not in snippets:
-                        snippets.append(text)
-                        if len(snippets) >= 2:
-                            break
-
-        if not snippets:
-            # Try more general result snippets if featured answers are not present.
-            for result in soup.select("div.g"):
-                snippet = result.select_one("div.IsZvec, span.aCOpRe, div.BNeawe.s3v9rd.AP7Wnd")
-                if snippet:
-                    text = " ".join(snippet.stripped_strings)
-                    if len(text) >= 40 and text not in snippets:
-                        snippets.append(text)
-                        if len(snippets) >= 2:
-                            break
-
-        if not snippets:
-            return ""
-
-        # Prefer the first two non-empty snippets for a concise answer.
-        return " ".join(snippets[:2])
+            return "I couldn't search Google right now."
 
     def _learn_from_text(self, text: str) -> None:
         """Store useful long-term user facts."""
