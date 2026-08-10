@@ -370,15 +370,16 @@ class ChatPanel(ctk.CTkFrame):
         if not reply:
             reply = "I do not have a response for that yet."
 
-        self._set_status("Speaking")
-
-        if self.voice_manager.settings.get("auto_speaking", True):
+        if self.voice_manager.settings.get("auto_speaking", True) and not getattr(self.assistant, "used_google_search", False):
+            self._set_status("Speaking")
             thread = threading.Thread(
                 target=self.voice_manager.speak,
                 args=(reply,),
                 daemon=True,
             )
             thread.start()
+        else:
+            self._set_status("Ready")
 
         bubble = ChatBubble(self.chat_frame, "assistant", "")
         self._scroll_to_bottom()
