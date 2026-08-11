@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import quote_plus
+
 import requests
 from bs4 import BeautifulSoup
 
-from ai.gemini_client import GeminiQuotaExceeded, client as gemini_client, generate_ai_response
+from ai.gemini_client import client as gemini_client, generate_ai_response
 from ai.memory import ConversationMemory
 from ai.memory_manager import MemoryManager
 from ai.memory_prompt import MemoryPromptBuilder
@@ -20,8 +21,14 @@ from commands.reminders import ReminderCommands
 from commands.router import CommandRouter
 from commands.system import SystemCommands
 
+try:
+    from commands.whatsapp import WhatsAppCommands
+except ImportError:
+    WhatsAppCommands = None
+
 
 def google_search_answer(query: str) -> str:
+    """Search Google and return a short readable answer."""
     clean_query = query.strip()
     if not clean_query:
         return "Please ask a question so I can search Google."
@@ -29,29 +36,27 @@ def google_search_answer(query: str) -> str:
     summary = fetch_google_search_summary(clean_query)
     if summary:
         return f"{summary}\n\nSource: Google search results"
-    return "I couldn't find a reliable answer for that search."
+
+    return "I could not find a reliable answer for that search."
 
 
 def fetch_google_search_summary(query: str) -> str:
-    url = f"https://www.google.com/search?hl=en&gl=us&pws=0&safe=off&q={quote_plus(query)}"
+    """Fetch a short summary from Google search result snippets."""
+    url = f"https://www.google.com/search?hl=en&gl=us&pws=0&q={quote_plus(query)}"
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
             "AppleWebKit/537.36 (KHTML, like Gecko) "
             "Chrome/121.0.0.0 Safari/537.36"
-        ),
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "gzip, deflate",
-        "Referer": "https://www.google.com/",
-        "Connection": "keep-alive",
+        )
     }
 
-    response = requests.get(url, headers=headers, timeout=15)
+    response = requests.get(url, headers=headers, timeout=12)
     response.raise_for_status()
 
     soup = BeautifulSoup(response.text, "html.parser")
     snippets: list[str] = []
+
     selectors = [
         'div[data-attrid^="wa:"]',
         'div[data-attrid^="kc:"]',
@@ -70,27 +75,13 @@ def fetch_google_search_summary(query: str) -> str:
 
     if not snippets:
         for result in soup.select("div.g"):
-            snippet = result.select_one("div.IsZvec, span.aCOpRe, div.BNeawe.s3v9rd.AP7Wnd")
-            if snippet:
-                text = " ".join(snippet.stripped_strings)
-                if len(text) >= 40 and text not in snippets:
-                    snippets.append(text)
-                    if len(snippets) >= 2:
-                        break
-
-    if not snippets:
-        # As a last resort, gather longer text from result blocks.
-        for result in soup.select("div.g"):
             text = " ".join(result.stripped_strings)
             if 80 <= len(text) <= 600 and text not in snippets:
                 snippets.append(text)
                 if len(snippets) >= 2:
                     break
 
-    if not snippets:
-        return ""
-
-    return " ".join(snippets[:2])
+    return " ".join(snippets[:2]) if snippets else ""
 
 
 @dataclass
@@ -112,7 +103,7 @@ class UserProfileUpdate:
 
 
 class AyraAssistant:
-    """Route user requests to commands, memory, reminders, or Gemini AI."""
+    """Route user requests to commands, memory, search, or AI."""
 
     def __init__(self) -> None:
         self.memory = ConversationMemory()
@@ -124,10 +115,18 @@ class AyraAssistant:
         self.reminders = ReminderCommands()
         self.system = SystemCommands()
         self.router = CommandRouter()
+        self.whatsapp = WhatsAppCommands() if WhatsAppCommands else None
+
         self.used_google_search = False
+        self.last_folder_path: Path | None = None
+        self.last_file_path: Path | None = None
+        self.intent_type = "unknown"
 
     def handle(self, message: str) -> str:
         """Handle a user message and return AYRA's response."""
+        self.used_google_search = False
+        self.intent_type = "unknown"
+
         text = message.strip()
         if not text:
             return "Please say something so I can help."
@@ -136,25 +135,41 @@ class AyraAssistant:
 
         command_response = self._handle_commands(text, lowered)
         if command_response:
+            self.intent_type = "local_action"
             return command_response
 
         memory_response = self._handle_memory_commands(text, lowered)
         if memory_response:
+            self.intent_type = "memory_action"
             return memory_response
 
-        return self._handle_ai_chat(text)
+        return self._handle_ai_chat(text, lowered)
 
     def _handle_commands(self, text: str, lowered: str) -> str | None:
-        """Handle deterministic desktop, browser, weather, and calculator commands."""
-        if lowered.startswith("open "):
-            app_name = text[5:].strip()
-            return self.system.open_app(app_name)
+        """Handle desktop, browser, file, folder, WhatsApp, and calculator commands."""
+        whatsapp_response = self._handle_whatsapp_commands(text, lowered)
+        if whatsapp_response:
+            return whatsapp_response
+
+        if "youtube" in lowered and "play" in lowered:
+            query = lowered
+            for word in ["open", "youtube", "and", "play", "song", "music"]:
+                query = query.replace(word, "")
+            return self.system.search_youtube(query.strip() or "music")
+
+        if lowered.startswith("play "):
+            query = text[5:].strip()
+            return self.system.search_youtube(query or "music")
 
         if self._is_youtube_open_command(lowered):
             return self.browser.open_url("https://www.youtube.com")
 
         if self._is_google_open_command(lowered):
             return self.browser.open_url("https://www.google.com")
+
+        if lowered.startswith("open "):
+            app_name = text[5:].strip()
+            return self.system.open_app(app_name)
 
         if "search youtube" in lowered or "youtube search" in lowered:
             query = self._clean_query(lowered, ["search youtube", "youtube search"])
@@ -189,65 +204,30 @@ class AyraAssistant:
         if "screenshot" in lowered:
             return self.system.take_screenshot()
 
-        # Support compound commands like: "Create a folder named Ashish on my Desktop and create a file named Ayra.py inside it."
-        if " and " in lowered and ("create folder" in lowered or "make folder" in lowered) and ("create file" in lowered or "make file" in lowered):
-            # split into parts and attempt to process folder then file
-            parts = [p.strip() for p in text.split(" and ", 1)]
-            folder_resp = None
-            file_resp = None
-
-            # find folder part
-            for part in parts:
-                if any(kw in part.lower() for kw in ("create folder", "create a folder", "make folder")):
-                    folder_name = self._extract_folder_name(part)
-                    if folder_name:
-                        folder_resp = self.system.create_folder(folder_name)
-            # find file part and respect 'it' references
-            for part in parts:
-                if any(kw in part.lower() for kw in ("create file", "create a file", "make file")):
-                    filename, folder_hint = self._extract_file_name(part)
-                    if not filename:
-                        continue
-                    if folder_hint and folder_hint.strip() == "it":
-                        if folder_name:
-                            target_path = str(Path.home() / "Desktop" / folder_name / filename)
-                        else:
-                            target_path = str(Path.home() / "Desktop" / filename)
-                    elif folder_hint:
-                        if folder_hint.strip().lower() == "desktop":
-                            target_path = str(Path.home() / "Desktop" / filename)
-                        else:
-                            target_path = str(Path.home() / "Desktop" / folder_hint.strip() / filename)
-                    else:
-                        target_path = str(Path.home() / "Desktop" / filename)
-
-                    file_resp = self.system.create_file(target_path)
-
-            results = []
-            if folder_resp:
-                results.append(folder_resp)
-            if file_resp:
-                results.append(file_resp)
-            return " ".join(results) if results else None
+        compound_response = self._handle_compound_file_command(text, lowered)
+        if compound_response:
+            return compound_response
 
         if "create folder" in lowered or "create a folder" in lowered or "make folder" in lowered:
             folder_name = self._extract_folder_name(text)
             if not folder_name:
                 return "Please tell me the folder name. Example: create folder ashish"
-            return self.system.create_folder(folder_name)
+
+            response = self.system.create_folder(folder_name)
+            if response.startswith("Created folder"):
+                self._remember_recent_folder(self._folder_name_to_path(folder_name))
+            return response
 
         if "create file" in lowered or "create a file" in lowered or "make file" in lowered:
             filename, folder_hint = self._extract_file_name(text)
             if not filename:
                 return "Please tell me the file name. Example: create file document.txt"
-            # Build target path if folder hint present
-            if folder_hint:
-                if folder_hint.strip().lower() == "desktop":
-                    target = str(Path.home() / "Desktop" / filename)
-                else:
-                    target = str(Path.home() / "Desktop" / folder_hint.strip() / filename)
-                return self.system.create_file(target)
-            return self.system.create_file(filename)
+
+            target = self._build_file_target_path(filename, folder_hint)
+            response = self.system.create_file(str(target))
+            if response.startswith("Created file"):
+                self._remember_recent_file(target)
+            return response
 
         if self._looks_like_math(lowered):
             return self.calculator.evaluate(text)
@@ -258,60 +238,67 @@ class AyraAssistant:
 
         return None
 
-    def _extract_folder_name(self, text: str) -> str:
-        """Extract folder name from natural language."""
-        lowered = text.lower()
+    def _handle_whatsapp_commands(self, text: str, lowered: str) -> str | None:
+        """Handle WhatsApp commands if WhatsAppCommands is available."""
+        if "whatsapp" not in lowered:
+            return None
 
-        patterns = [
-            r"create a folder(?: named| name| called)?\s+(.+)",
-            r"create folder(?: named| name| called)?\s+(.+)",
-            r"make folder(?: named| name| called)?\s+(.+)",
-            r"folder name(?: is)?\s+(.+)",
-        ]
+        if self.whatsapp is None:
+            return "WhatsApp commands are not installed. Add commands/whatsapp.py first."
 
-        for pattern in patterns:
-            match = re.search(pattern, lowered)
-            if match:
-                name = match.group(1).strip()
-                # remove common location qualifiers
-                for suffix in (" on my desktop", " on desktop", " in my desktop", " in desktop", " on the desktop"):
-                    if name.endswith(suffix):
-                        name = name[: -len(suffix)].strip()
-                # remove trailing punctuation
-                return name.strip().strip("." )
+        if lowered in {"open whatsapp", "open whatsapp web"}:
+            return self.whatsapp.open_whatsapp()
 
-        return ""
+        if lowered.startswith("send whatsapp to "):
+            parts = text[len("send whatsapp to "):].split(" message ", 1)
+            if len(parts) != 2:
+                return "Use: send whatsapp to contact_name message your message"
+            contact_name, message = parts
+            return self.whatsapp.send_to_contact(contact_name, message)
 
-    def _extract_file_name(self, text: str) -> tuple[str, str | None]:
-        """Extract filename and optional folder from natural language.
+        if lowered.startswith("send whatsapp number "):
+            parts = text[len("send whatsapp number "):].split(" message ", 1)
+            if len(parts) != 2:
+                return "Use: send whatsapp number 919876543210 message your message"
+            number, message = parts
+            return self.whatsapp.send_message(number, message)
 
-        Returns (filename, folder) where folder may be None or a simple name like 'Ashish' or 'Desktop'.
-        """
-        patterns = [
-            r"(?:create|make) (?:a )?file(?: named| called)?\s+['\"]?(?P<filename>.+?)['\"]?(?:\s+(?:inside|in)\s+(?:the\s+)?(?P<folder>[^\.]+))?$",
-            r"(?:create|make) (?:a )?python file(?: named| called)?\s+['\"]?(?P<filename>.+?)['\"]?(?:\s+(?:inside|in)\s+(?:the\s+)?(?P<folder>[^\.]+))?$",
-        ]
+        return None
 
-        for pattern in patterns:
-            match = re.search(pattern, text, flags=re.IGNORECASE)
-            if match:
-                filename = match.group("filename").strip()
-                folder = match.group("folder")
-                if folder:
-                    folder = folder.strip().lower()
-                    for suffix in (" folder", " on my desktop", " on desktop", " in my desktop", " in desktop", " on the desktop"):
-                        if folder.endswith(suffix):
-                            folder = folder[: -len(suffix)].strip()
-                    if folder == "it":
-                        folder = "it"
-                return filename, folder
+    def _handle_compound_file_command(self, text: str, lowered: str) -> str | None:
+        """Handle commands that create a folder and file together."""
+        has_folder = "create folder" in lowered or "create a folder" in lowered or "make folder" in lowered
+        has_file = "create file" in lowered or "create a file" in lowered or "make file" in lowered
 
-        # Fallback: look for a bare filename pattern without folder context
-        match = re.search(r"([\w\-. ]+\.[a-zA-Z0-9]+)", text)
-        if match:
-            return match.group(1).strip(), None
+        if " and " not in lowered or not (has_folder and has_file):
+            return None
 
-        return "", None
+        parts = [part.strip() for part in text.split(" and ", 1)]
+        folder_response = None
+        file_response = None
+        folder_name = None
+
+        for part in parts:
+            part_lowered = part.lower()
+            if "folder" in part_lowered:
+                folder_name = self._extract_folder_name(part)
+                if folder_name:
+                    folder_response = self.system.create_folder(folder_name)
+                    if folder_response.startswith("Created folder"):
+                        self._remember_recent_folder(self._folder_name_to_path(folder_name))
+
+        for part in parts:
+            part_lowered = part.lower()
+            if "file" in part_lowered:
+                filename, folder_hint = self._extract_file_name(part)
+                if filename:
+                    target = self._build_file_target_path(filename, folder_hint or "it")
+                    file_response = self.system.create_file(str(target))
+                    if file_response.startswith("Created file"):
+                        self._remember_recent_file(target)
+
+        results = [item for item in [folder_response, file_response] if item]
+        return " ".join(results) if results else None
 
     def _handle_memory_commands(self, text: str, lowered: str) -> str | None:
         """Handle notes, reminders, and profile learning commands."""
@@ -357,90 +344,54 @@ class AyraAssistant:
 
         return None
 
-    def _handle_ai_chat(self, text: str) -> str:
-        """Send normal conversation to Gemini with memory context."""
+    def _handle_ai_chat(self, text: str, lowered: str) -> str:
+        """Route conversation and knowledge questions through AI or search."""
         prompt_context = self.memory_prompt_builder.build(text)
         prompt = text if not prompt_context else f"{prompt_context}\nUser: {text}"
 
-        if self._should_search_google(text):
+        if self._should_search_google(text, lowered):
             response = self._search_google_and_answer(text)
+            if not response or "couldn't search" in response.lower():
+                response = generate_ai_response(prompt, history=self.memory.snapshot())
             self.used_google_search = True
-            self.memory.add_user_message(text)
-            self.memory.add_assistant_message(response)
-            return response
-
-        try:
-            response = generate_ai_response(
-                prompt,
-                history=self.memory.snapshot(),
-            )
+            self.intent_type = "web_search"
+        else:
+            response = generate_ai_response(prompt, history=self.memory.snapshot())
             self.used_google_search = False
-        except GeminiQuotaExceeded:
-            response = self._search_google_and_answer(text)
-            self.used_google_search = True
-        except Exception:
-            response = self._search_google_and_answer(text)
-            self.used_google_search = True
+            self.intent_type = "conversation"
 
         self.memory.add_user_message(text)
         self.memory.add_assistant_message(response)
         return response
 
-    def _should_search_google(self, text: str) -> bool:
-        """Detect if a general knowledge question should use Google search."""
-        return self._is_general_knowledge_question(text)
+    def _should_search_google(self, text: str, lowered: str) -> bool:
+        """Use Google only for current or explicitly verified information."""
+        if self._is_explicit_search_command(lowered):
+            return False
+
+        if self._is_current_info_question(lowered):
+            return True
+
+        verify_words = ["verify", "check online", "search and tell", "latest", "current"]
+        return any(word in lowered for word in verify_words)
 
     def should_use_google_search(self, text: str) -> bool:
-        """Tell UI whether a Google search fallback is expected."""
-        return self._should_search_google(text)
-
-    def _is_gemini_available(self) -> bool:
-        return bool(getattr(gemini_client, "client", None)) and not getattr(
-            gemini_client, "quota_exhausted", False
-        )
-
-    def _is_general_knowledge_question(self, text: str) -> bool:
+        """Tell UI whether a background Google answer is expected."""
         lowered = text.strip().lower()
         if not lowered:
             return False
+        return self._should_search_google(text, lowered)
 
-        if any(lowered.startswith(prefix) for prefix in [
-            "what is",
-            "what are",
-            "what's",
-            "who is",
-            "who was",
-            "who created",
-            "who invented",
-            "who made",
-            "tell me about",
-            "explain",
-            "how does",
-            "how do",
-            "how to",
-            "define",
-            "difference between",
-            "why",
-        ]):
-            return True
-
-        if lowered.endswith("?") and any(keyword in lowered for keyword in [
-            "what",
-            "who",
-            "how",
-            "why",
-            "when",
-            "difference",
-            "define",
-        ]):
-            return True
-
-        if "tell me about" in lowered:
-            return True
-
-        return False
+    def _is_gemini_available(self) -> bool:
+        """Return True when Gemini is configured and quota is not exhausted."""
+        return bool(getattr(gemini_client, "client", None)) and not getattr(
+            gemini_client,
+            "quota_exhausted",
+            False,
+        )
 
     def _search_google_and_answer(self, query: str) -> str:
+        """Search Google in the background and return a readable answer."""
         clean_query = query.strip()
         if not clean_query:
             return "Please ask a question so I can search Google."
@@ -449,13 +400,96 @@ class AyraAssistant:
             summary = fetch_google_search_summary(clean_query)
             if summary:
                 return f"{summary}\n\nSource: Google search results"
-            return "I couldn't find a reliable answer for that search."
-        except Exception as exc:
-            import traceback
+            return "I could not find a reliable answer for that search."
+        except Exception:
+            return "I could not search Google right now."
 
-            print("AYRA GOOGLE SEARCH ERROR:", repr(exc))
-            traceback.print_exc()
-            return "I couldn't search Google right now."
+    def _extract_folder_name(self, text: str) -> str:
+        """Extract folder name from natural language."""
+        patterns = [
+            r"create a folder(?: named| name| called)?\s+(.+)",
+            r"create folder(?: named| name| called)?\s+(.+)",
+            r"make folder(?: named| name| called)?\s+(.+)",
+            r"folder name(?: is)?\s+(.+)",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                name = match.group(1).strip()
+                name = re.sub(r"\s+on\s+(my\s+)?desktop$", "", name, flags=re.IGNORECASE)
+                name = re.sub(r"\s+in\s+(my\s+)?desktop$", "", name, flags=re.IGNORECASE)
+                return name.strip().strip(".")
+
+        return ""
+
+    def _extract_file_name(self, text: str) -> tuple[str, str | None]:
+        """Extract filename and optional folder hint."""
+        patterns = [
+            r"(?:create|make) (?:a )?python file(?: named| called)?\s+['\"]?(?P<filename>.+?)['\"]?(?:\s+(?:inside|in)\s+(?:the\s+)?(?P<folder>[^.]+))?$",
+            r"(?:create|make) (?:a )?file(?: named| called)?\s+['\"]?(?P<filename>.+?)['\"]?(?:\s+(?:inside|in)\s+(?:the\s+)?(?P<folder>[^.]+))?$",
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                filename = match.group("filename").strip().strip("'\"")
+                folder = match.group("folder")
+
+                if folder:
+                    folder = folder.strip()
+                    folder = re.sub(r"\s+folder$", "", folder, flags=re.IGNORECASE)
+                    folder = re.sub(r"\s+on\s+(my\s+)?desktop$", "", folder, flags=re.IGNORECASE)
+
+                return filename, folder
+
+        match = re.search(r"([\w\-. ]+\.[a-zA-Z0-9]+)", text)
+        if match:
+            return match.group(1).strip(), None
+
+        return "", None
+
+    def _folder_name_to_path(self, folder_name: str) -> Path:
+        """Convert folder name to a useful path."""
+        if any(separator in folder_name for separator in ("/", "\\", ":")):
+            return Path(folder_name)
+        return Path.home() / "Desktop" / folder_name
+
+    def _remember_recent_folder(self, folder_path: Path) -> None:
+        """Keep short-term folder context for follow-up commands."""
+        self.last_folder_path = folder_path
+
+    def _remember_recent_file(self, file_path: Path) -> None:
+        """Keep short-term file context for follow-up commands."""
+        self.last_file_path = file_path
+
+    def _build_file_target_path(self, filename: str, folder_hint: str | None) -> Path:
+        """Build the full target path for a new file."""
+        if folder_hint:
+            folder_path = self._resolve_folder_hint(folder_hint)
+        else:
+            folder_path = self.last_folder_path or Path.home() / "Desktop"
+
+        return (folder_path or Path.home() / "Desktop") / filename
+
+    def _resolve_folder_hint(self, folder_hint: str) -> Path | None:
+        """Resolve words like 'it', 'desktop', or folder names into a path."""
+        hint = folder_hint.strip().lower()
+        if hint in {"it", "that", "there"} and self.last_folder_path:
+            return self.last_folder_path
+
+        if hint in {"desktop", "my desktop", "the desktop"}:
+            return Path.home() / "Desktop"
+
+        files_tool = getattr(self.router, "files", None)
+        known_folders = getattr(files_tool, "known_folders", {})
+        if hint in known_folders:
+            return known_folders[hint]
+
+        if any(separator in folder_hint for separator in ("/", "\\", ":")):
+            return Path(folder_hint)
+
+        return Path.home() / "Desktop" / folder_hint
 
     def _learn_from_text(self, text: str) -> None:
         """Store useful long-term user facts."""
@@ -494,6 +528,39 @@ class AyraAssistant:
         open_words = ["open", "launch", "start", "go to"]
         return "google" in lowered and any(word in lowered for word in open_words)
 
+    def _is_current_info_question(self, lowered: str) -> bool:
+        """Return True for questions that need current information."""
+        current_markers = [
+            "today",
+            "current",
+            "latest",
+            "recent",
+            "now",
+            "weather",
+            "news",
+            "update",
+            "score",
+            "price",
+            "version",
+            "stock",
+        ]
+        return any(marker in lowered for marker in current_markers)
+
+    def _is_explicit_search_command(self, lowered: str) -> bool:
+        """Return True when the user explicitly asks to open a search page."""
+        search_triggers = [
+            "search google",
+            "google search",
+            "search youtube",
+            "youtube search",
+            "search github",
+            "github search",
+            "search stack overflow",
+            "stackoverflow",
+            "search ",
+        ]
+        return any(trigger in lowered for trigger in search_triggers)
+
     def _clean_query(self, text: str, phrases: list[str]) -> str:
         """Remove command phrases and return the search query."""
         query = text
@@ -504,9 +571,7 @@ class AyraAssistant:
     def _extract_number(self, text: str) -> int | None:
         """Extract the first integer from text."""
         match = re.search(r"\d+", text)
-        if not match:
-            return None
-        return int(match.group())
+        return int(match.group()) if match else None
 
     def _looks_like_math(self, lowered: str) -> bool:
         """Detect simple math expressions."""
