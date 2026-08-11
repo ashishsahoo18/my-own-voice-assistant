@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Generator
 from pathlib import Path
 from typing import Optional
 
@@ -19,7 +20,6 @@ except Exception:
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-
 OFFLINE_RESPONSE = (
     "I am running in offline mode. I can still help with opening apps, "
     "YouTube search, Google search, WhatsApp, reminders, notes, screenshots, "
@@ -34,28 +34,18 @@ class GeminiClient:
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
         self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
         self.client = None
-        # Track quota exhaustion to avoid repeated retries on 429
-        self.quota_exhausted: bool = False
-        self.quota_reset_ts: float | None = None
+        self.quota_exhausted = False
 
-        if self.api_key and genai is not None:
-            self.client = genai.Client(api_key=self.api_key)
+        if self.api_key and genai is not None and types is not None:
+            try:
+                self.client = genai.Client(api_key=self.api_key)
+            except Exception:
+                self.client = None
 
     def ask(self, prompt: str, history: Optional[list[dict]] = None) -> str:
         """Return Gemini response or offline fallback."""
-        # If the client is not configured, fall back immediately
-        if not self.client:
+        if not self.client or self.quota_exhausted:
             return self._offline_answer(prompt)
-
-        # If we previously detected a quota exhaustion, avoid retrying until reset
-        import time
-
-        if self.quota_exhausted:
-            if self.quota_reset_ts and time.time() < self.quota_reset_ts:
-                raise GeminiQuotaExceeded("Gemini quota exhausted until reset")
-            # quota_reset_ts passed -> clear flag and attempt again
-            self.quota_exhausted = False
-            self.quota_reset_ts = None
 
         try:
             response = self.client.models.generate_content(
@@ -66,71 +56,53 @@ class GeminiClient:
                     temperature=0.7,
                 ),
             )
-            return getattr(response, "text", "").strip() or self._offline_answer(prompt)
+            text = getattr(response, "text", "")
+            return text.strip() if text else self._offline_answer(prompt)
         except Exception as exc:
-            # Detect quota/exhausted errors (HTTP 429 / RESOURCE_EXHAUSTED)
-            from google.genai import errors as _genai_errors
-            import traceback
-            print("AYRA AI ERROR:", repr(exc))
-            traceback.print_exc()
-
-            # Many genai client errors expose status/details in the exception
-            try:
-                # genai ClientError exposes status_code and response_json
-                status_code = getattr(exc, "status_code", None)
-                resp = getattr(exc, "response_json", None)
-            except Exception:
-                status_code = None
-                resp = None
-
-            # Check heuristics for quota exhausted
-            is_quota = False
-            if status_code == 429:
-                is_quota = True
-            if resp and isinstance(resp, dict):
-                # Look for RESOURCE_EXHAUSTED in status or message
-                err = resp.get("error") or {}
-                msg = err.get("message", "")
-                if "RESOURCE_EXHAUSTED" in msg or "quota" in msg.lower():
-                    is_quota = True
-                # Try to parse retry info seconds
-                for d in err.get("details", []):
-                    if isinstance(d, dict) and d.get("@type", "").endswith("RetryInfo"):
-                        # may include retryDelay like '54s' or similar
-                        for v in d.values():
-                            if isinstance(v, str) and v.endswith("s") and v[:-1].isdigit():
-                                try:
-                                    import time
-
-                                    self.quota_reset_ts = time.time() + int(v[:-1])
-                                except Exception:
-                                    pass
-            # Fallback: check repr for RESOURCE_EXHAUSTED
-            if not is_quota and "RESOURCE_EXHAUSTED" in repr(exc):
-                is_quota = True
-
-            if is_quota:
-                # mark exhausted and avoid retrying until reset time
-                import time
-
+            if self._is_quota_error(exc):
                 self.quota_exhausted = True
-                if self.quota_reset_ts is None:
-                    # default to 60 seconds if unknown
-                    self.quota_reset_ts = time.time() + 60
-                # Raise a sentinel so caller can react specifically
-                raise GeminiQuotaExceeded("Gemini API quota exhausted")
-
             return self._offline_answer(prompt)
 
+    def stream(self, prompt: str, history: Optional[list[dict]] = None) -> Generator[str, None, None]:
+        """Streaming-compatible fallback."""
+        yield self.ask(prompt, history)
+
+    def _is_quota_error(self, exc: Exception) -> bool:
+        """Detect Gemini quota/rate-limit errors."""
+        message = str(exc).lower()
+        return (
+            "429" in message
+            or "resource_exhausted" in message
+            or "quota" in message
+            or "rate limit" in message
+        )
 
     def _offline_answer(self, prompt: str) -> str:
-        """Simple offline answers without API key."""
+        """Simple offline answers without API key or quota."""
         text = prompt.lower().strip()
 
         if "http" in text:
             return (
-                "HTTP means HyperText Transfer Protocol. It is the rule system browsers "
-                "and servers use to send web pages and data over the internet."
+                "HTTP means HyperText Transfer Protocol. It is the protocol "
+                "browsers and servers use to exchange web pages and data."
+            )
+
+        if "python" in text:
+            return (
+                "Python is a high-level programming language used for automation, "
+                "web development, data analysis, AI, and scripting."
+            )
+
+        if "bfs" in text:
+            return (
+                "BFS means Breadth-First Search. It explores a graph level by level "
+                "and usually uses a queue."
+            )
+
+        if "dfs" in text:
+            return (
+                "DFS means Depth-First Search. It explores deeply along one path "
+                "before backtracking."
             )
 
         if "who are you" in text or "your name" in text:
@@ -148,11 +120,6 @@ class GeminiClient:
         )
 
 
-class GeminiQuotaExceeded(Exception):
-    """Raised when Gemini returns an explicit quota/exhausted response (429)."""
-    pass
-
-
 client = GeminiClient()
 
 
@@ -166,6 +133,9 @@ def ask_ai(prompt: str, history: Optional[list[dict]] = None) -> str:
     return client.ask(prompt, history)
 
 
-def stream_ai_response(prompt: str, history: Optional[list[dict]] = None):
-    """Simple streaming-compatible wrapper."""
-    yield client.ask(prompt, history)
+def stream_ai_response(
+    prompt: str,
+    history: Optional[list[dict]] = None,
+) -> Generator[str, None, None]:
+    """Yield a streaming-compatible response."""
+    yield from client.stream(prompt, history)
