@@ -32,7 +32,7 @@ class GeminiClient:
 
     def __init__(self) -> None:
         self.api_key = os.getenv("GEMINI_API_KEY", "").strip()
-        self.model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+        self.model = self._resolve_model_name()
         self.client = None
         self.quota_exhausted = False
 
@@ -47,10 +47,14 @@ class GeminiClient:
         if not self.client or self.quota_exhausted:
             return self._offline_answer(prompt)
 
+        trimmed_history = self._trim_history(history)
+        contents: list[str] = [item.get("content", "") for item in trimmed_history if item.get("content")]
+        contents.append(prompt)
+
         try:
             response = self.client.models.generate_content(
                 model=self.model,
-                contents=prompt,
+                contents=contents,
                 config=types.GenerateContentConfig(
                     system_instruction=self._system_prompt(),
                     temperature=0.7,
@@ -70,12 +74,29 @@ class GeminiClient:
     def _is_quota_error(self, exc: Exception) -> bool:
         """Detect Gemini quota/rate-limit errors."""
         message = str(exc).lower()
+        status = getattr(exc, "status_code", None)
         return (
             "429" in message
             or "resource_exhausted" in message
             or "quota" in message
             or "rate limit" in message
+            or status == 429
         )
+
+    def _resolve_model_name(self) -> str:
+        """Return a supported Gemini model name from environment or fallback."""
+        configured = os.getenv("GEMINI_MODEL", "").strip()
+        if configured:
+            return configured
+        return "gemini-1.5"
+
+    def _trim_history(self, history: Optional[list[dict]] = None, max_messages: int = 8) -> list[dict]:
+        """Trim long conversation history to the most recent entries."""
+        if not history:
+            return []
+        if len(history) <= max_messages:
+            return history
+        return history[-max_messages:]
 
     def _offline_answer(self, prompt: str) -> str:
         """Simple offline answers without API key or quota."""
