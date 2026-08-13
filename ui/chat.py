@@ -274,7 +274,7 @@ class ChatPanel(ctk.CTkFrame):
             reply = self.assistant.handle(message)
         except Exception as exc:
             print("AYRA CHAT ERROR:", repr(exc))
-            reply = "I had trouble answering that. Please check the terminal error."
+            reply = f"I had trouble answering that: {exc}"
 
         self.after(0, self._show_assistant_reply, reply)
 
@@ -295,29 +295,16 @@ class ChatPanel(ctk.CTkFrame):
             daemon=True,
         ).start()
 
-        bubble = ChatBubble(self.chat_frame, "assistant", "")
-        words = reply.split()
+        # Create bubble directly with complete reply text so output is instantly visible in the conversation panel
+        bubble = ChatBubble(self.chat_frame, "assistant", reply)
+        self._scroll_to_bottom()
 
-        def step(index: int) -> None:
-            if index >= len(words):
-                bubble.update_text(reply)
-                try:
-                    self.store.save_message(self.session_id, "assistant", reply)
-                except Exception as exc:
-                    print("AYRA DATABASE ERROR:", repr(exc))
-                self._set_status("Ready")
-                self._scroll_to_bottom()
-                return
+        try:
+            self.store.save_message(self.session_id, "assistant", reply)
+        except Exception as exc:
+            print("AYRA DATABASE ERROR:", repr(exc))
 
-            bubble.update_text(" ".join(words[: index + 1]))
-            self._scroll_to_bottom()
-            self.after(25, step, index + 1)
-
-        if words:
-            step(0)
-        else:
-            bubble.update_text(reply)
-            self._set_status("Ready")
+        self._set_status("Ready")
 
     def _add_message(self, role: str, text: str) -> None:
         ChatBubble(self.chat_frame, role, text)
