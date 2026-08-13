@@ -239,7 +239,7 @@ class AyraAssistant:
         return None
 
     def _handle_whatsapp_commands(self, text: str, lowered: str) -> str | None:
-        if "whatsapp" not in lowered:
+        if "whatsapp" not in lowered and not lowered.startswith("message "):
             return None
 
         if self.whatsapp is None:
@@ -250,19 +250,50 @@ class AyraAssistant:
                 return self.whatsapp.open_whatsapp()
             return self.browser.open_url("https://web.whatsapp.com")
 
-        if lowered.startswith("send whatsapp to "):
-            parts = text[len("send whatsapp to "):].split(" message ", 1)
-            if len(parts) != 2:
-                return "Use: send whatsapp to contact_name message your message"
-            contact_name, message = parts
-            return self.whatsapp.send_to_contact(contact_name, message)
+        # Flexible pattern matching for WhatsApp direct messages
+        patterns = [
+            r"^send whatsapp to (?P<contact>[^:\s]+(?:\s+[^:\s]+)*?)\s+(?:message|text|msg|saying)?\s*:?\s*(?P<msg>.+)$",
+            r"^message (?P<contact>[^:\s]+(?:\s+[^:\s]+)*?)\s+on whatsapp\s+(?:message|text|msg|saying)?\s*:?\s*(?P<msg>.+)$",
+            r"^send message to (?P<contact>[^:\s]+(?:\s+[^:\s]+)*?)\s+on whatsapp\s+(?:message|text|msg|saying)?\s*:?\s*(?P<msg>.+)$",
+            r"^send whatsapp message to (?P<contact>[^:\s]+(?:\s+[^:\s]+)*?)\s*:?\s*(?P<msg>.+)$",
+            r"^send whatsapp number (?P<number>\+?\d+)\s+(?:message|text|msg|saying)?\s*:?\s*(?P<msg>.+)$",
+            r"^whatsapp number (?P<number>\+?\d+)\s+(?:message|text|msg|saying)?\s*:?\s*(?P<msg>.+)$",
+            r"^whatsapp to (?P<contact>[^:\s]+(?:\s+[^:\s]+)*?)\s+(?:message|text|msg|saying)?\s*:?\s*(?P<msg>.+)$",
+            r"^whatsapp (?P<contact>[a-zA-Z0-9_\-]+)\s+(?P<msg>.+)$",
+        ]
 
-        if lowered.startswith("send whatsapp number "):
-            parts = text[len("send whatsapp number "):].split(" message ", 1)
-            if len(parts) != 2:
-                return "Use: send whatsapp number 919876543210 message your message"
-            number, message = parts
-            return self.whatsapp.send_message(number, message)
+        for pattern in patterns:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                groups = match.groupdict()
+                msg = groups.get("msg", "").strip()
+
+                if "number" in groups and groups["number"]:
+                    return self.whatsapp.send_message(groups["number"], msg)
+
+                if "contact" in groups and groups["contact"]:
+                    contact_name = groups["contact"].strip()
+
+                    # Check if contact_name is actually phone digits
+                    clean_contact_digits = "".join(c for c in contact_name if c.isdigit())
+                    if len(clean_contact_digits) >= 10 and len(clean_contact_digits) == len(contact_name.replace("+", "").strip()):
+                        return self.whatsapp.send_message(clean_contact_digits, msg)
+
+                    return self.whatsapp.send_to_contact(contact_name, msg)
+
+        # Legacy fallback split format
+        if "to" in lowered and ("message" in lowered or "msg" in lowered):
+            if "whatsapp" in lowered:
+                after_whatsapp = text
+                for kw in ["send whatsapp to", "whatsapp to", "send message to", "message"]:
+                    if kw in lowered:
+                        parts = re.split(r"\s+(?:message|msg|text|saying)\s+|\s*:\s*", text, maxsplit=1, flags=re.IGNORECASE)
+                        if len(parts) == 2:
+                            contact_part = parts[0]
+                            for prefix in ["send whatsapp to", "whatsapp to", "send message to", "message", "on whatsapp"]:
+                                contact_part = re.sub(prefix, "", contact_part, flags=re.IGNORECASE).strip()
+                            if contact_part and parts[1].strip():
+                                return self.whatsapp.send_to_contact(contact_part, parts[1].strip())
 
         return None
 
