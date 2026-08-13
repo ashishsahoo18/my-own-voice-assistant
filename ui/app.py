@@ -205,12 +205,14 @@ class AyraApp(ctk.CTk):
         ).pack(fill="x", padx=16, pady=(14, 10))
 
         shortcuts = [
+            "Knowledge",
+            "WhatsApp",
             "Browser",
             "VS Code",
             "Explorer",
-            "Settings",
             "Notepad",
             "Calculator",
+            "Settings",
         ]
 
         grid = ctk.CTkFrame(card, fg_color="transparent")
@@ -375,13 +377,13 @@ class AyraApp(ctk.CTk):
         self.after(90, self._draw_orb)
 
     def _handle_shortcut(self, name: str) -> None:
-        """Route shortcut clicks into the chat panel for now."""
-        self.ai_state_var.set("THINKING")
-        if hasattr(self.chat_panel, "add_assistant_message"):
-            self.chat_panel.add_assistant_message(f"Opening {name}...")
+        """Route shortcut clicks directly into the assistant chat panel."""
+        self.ai_state_var.set("ACTING")
+        if name == "Knowledge":
+            self.chat_panel.send_text_message("What is basic knowledge?")
         else:
-            print(f"[AYRA AI] Shortcut selected: {name}")
-        self.after(800, lambda: self.ai_state_var.set("READY"))
+            self.chat_panel.send_text_message(f"open {name.lower()}")
+        self.after(1000, lambda: self.ai_state_var.set("READY"))
 
     def _update_startup_status(self) -> None:
         """Update startup status based on Gemini configuration."""
