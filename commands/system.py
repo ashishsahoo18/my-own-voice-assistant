@@ -19,6 +19,7 @@ class SystemCommands:
             "google": "https://www.google.com",
             "gmail": "https://mail.google.com",
             "drive": "https://drive.google.com",
+            "google drive": "https://drive.google.com",
             "whatsapp": "https://web.whatsapp.com",
             "whatsapp web": "https://web.whatsapp.com",
             "instagram": "https://www.instagram.com",
@@ -28,6 +29,16 @@ class SystemCommands:
             "stack overflow": "https://stackoverflow.com",
             "chatgpt": "https://chat.openai.com",
             "linkedin": "https://www.linkedin.com",
+            "twitter": "https://twitter.com",
+            "x": "https://x.com",
+            "reddit": "https://www.reddit.com",
+            "netflix": "https://www.netflix.com",
+            "spotify": "https://open.spotify.com",
+            "spotify web": "https://open.spotify.com",
+            "amazon": "https://www.amazon.in",
+            "maps": "https://maps.google.com",
+            "google maps": "https://maps.google.com",
+            "news": "https://news.google.com",
         }
 
         self.windows_apps = {
@@ -48,6 +59,22 @@ class SystemCommands:
             "visual studio code": "code",
             "chrome": "chrome.exe",
             "edge": "msedge.exe",
+            "firefox": "firefox.exe",
+            "brave": "brave.exe",
+            "spotify": "spotify.exe",
+            "word": "winword.exe",
+            "microsoft word": "winword.exe",
+            "excel": "excel.exe",
+            "microsoft excel": "excel.exe",
+            "powerpoint": "powerpnt.exe",
+            "microsoft powerpoint": "powerpnt.exe",
+            "teams": "ms-teams.exe",
+            "microsoft teams": "ms-teams.exe",
+            "discord": "discord.exe",
+            "telegram": "telegram.exe",
+            "zoom": "zoom.exe",
+            "vlc": "vlc.exe",
+            "steam": "steam.exe",
         }
 
     def open_app(self, app_name: str) -> str:
@@ -270,10 +297,18 @@ class SystemCommands:
         try:
             if target.startswith("ms-settings:"):
                 os.startfile(target)
-            else:
-                subprocess.Popen([target], shell=False)
+                return f"Opened {display_name}."
 
-            return f"Opened {display_name}."
+            try:
+                subprocess.Popen([target], shell=False)
+                return f"Opened {display_name}."
+            except Exception:
+                try:
+                    os.startfile(target)
+                    return f"Opened {display_name}."
+                except Exception:
+                    subprocess.Popen(f'start "" "{target}"', shell=True)
+                    return f"Opened {display_name}."
         except Exception as exc:
             return f"Could not open {display_name}: {exc}"
 
