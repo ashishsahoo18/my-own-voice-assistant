@@ -299,43 +299,44 @@ class ChatPanel(ctk.CTkFrame):
         self.send_message()
         return "break"
 
-    def send_message(self) -> None:
-        """Send typed text to the assistant without freezing the UI."""
-        if self._typing_active or self._request_in_flight:
-            return
+def send_message(self) -> None:
+    """Send typed text to the assistant."""
+    message = self.entry.get().strip()
+    self.send_text_message(message)
 
-        if time.monotonic() < self._cooldown_until:
-            self._set_status("Please wait")
-            return
 
-        message = self.entry.get().strip()
-        if not message:
-            return
+def send_text_message(self, message: str) -> None:
+    """Send any text to the assistant and show it in Conversation."""
+    if self._typing_active or self._request_in_flight:
+        return
 
-        self._clear_welcome_if_present()
-        self._add_message("user", message)
-        self.store.save_message(self.session_id, "user", message)
+    if time.monotonic() < self._cooldown_until:
+        self._set_status("Please wait")
+        return
 
-        self.entry.delete(0, tk.END)
-        self._cooldown_until = time.monotonic() + self._rate_limit_seconds
-        self._request_in_flight = True
-        self._set_busy_state(True)
-        self._show_typing_indicator()
-        if self.assistant.should_use_google_search(message):
-            self._set_status("SEARCHING GOOGLE...")
-            self._searching_google = True
-        else:
-            self._set_status("Thinking")
-            self._searching_google = False
+    message = message.strip()
+    if not message:
+        return
 
-        self._thinking_timer_id = self.after(2000, self._show_delayed_thinking_indicator)
+    self._clear_welcome_if_present()
+    self._add_message("user", message)
+    self.store.save_message(self.session_id, "user", message)
 
-        thread = threading.Thread(
-            target=self._handle_ai_reply,
-            args=(message,),
-            daemon=True,
-        )
-        thread.start()
+    self.entry.delete(0, tk.END)
+    self._cooldown_until = time.monotonic() + self._rate_limit_seconds
+    self._request_in_flight = True
+    self._set_busy_state(True)
+    self._show_typing_indicator()
+    self._set_status("Thinking")
+
+    self._thinking_timer_id = self.after(2000, self._show_delayed_thinking_indicator)
+
+    thread = threading.Thread(
+        target=self._handle_ai_reply,
+        args=(message,),
+        daemon=True,
+    )
+    thread.start()
 
     def _handle_ai_reply(self, message: str) -> None:
         """Run assistant request in a background thread."""
@@ -514,26 +515,22 @@ class ChatPanel(ctk.CTkFrame):
         thread = threading.Thread(target=self._handle_voice_input, daemon=True)
         thread.start()
 
-    def _handle_voice_input(self) -> None:
-        """Listen once, show transcript, and send it like a real conversation."""
-        try:
-            text = self.voice_manager.listen_once(status_callback=self._update_voice_status)
-        except Exception:
-            self.after(0, self._set_status, "Ready")
-            self.after(0, self._show_voice_feedback, "Sorry, I did not catch that.")
-            return
+def _handle_voice_input(self) -> None:
+    """Listen once, show transcript, and send directly to Conversation."""
+    try:
+        text = self.voice_manager.listen_once(status_callback=self._update_voice_status)
+    except Exception:
+        self.after(0, self._set_status, "Ready")
+        self.after(0, self._show_voice_feedback, "Sorry, I did not catch that.")
+        return
 
-        if not text:
-            self.after(0, self._set_status, "Ready")
-            self.after(0, self._show_voice_feedback, "Sorry, I did not catch that.")
-            return
+    if not text:
+        self.after(0, self._set_status, "Ready")
+        self.after(0, self._show_voice_feedback, "Sorry, I did not catch that.")
+        return
 
-        self.after(0, self.transcript_var.set, text)
-        self.after(0, self.entry.delete, 0, tk.END)
-        self.after(0, self.entry.insert, 0, text)
-        self.after(0, self.entry.icursor, len(text))
-
-        self.after(250, self.send_message)
+    self.after(0, self.transcript_var.set, text)
+    self.after(0, self.send_text_message, text)
 
     def _update_voice_status(self, status: str) -> None:
         clean_status = status.encode("ascii", "ignore").decode().strip() or "Listening"
