@@ -8,8 +8,15 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote_plus
 
-import requests
-from bs4 import BeautifulSoup
+try:
+    import requests
+except ImportError:
+    requests = None
+
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 
 from ai.gemini_client import client as gemini_client, generate_ai_response
 from ai.memory import ConversationMemory
@@ -28,7 +35,6 @@ except ImportError:
 
 
 def google_search_answer(query: str) -> str:
-    """Search Google and return a short readable answer."""
     clean_query = query.strip()
     if not clean_query:
         return "Please ask a question so I can search Google."
@@ -41,7 +47,9 @@ def google_search_answer(query: str) -> str:
 
 
 def fetch_google_search_summary(query: str) -> str:
-    """Fetch a short summary from Google search result snippets."""
+    if requests is None or BeautifulSoup is None:
+        return ""
+
     url = f"https://www.google.com/search?hl=en&gl=us&pws=0&q={quote_plus(query)}"
     headers = {
         "User-Agent": (
@@ -65,29 +73,20 @@ def fetch_google_search_summary(query: str) -> str:
         'span[class*="aCOpRe"]',
         'div[jsname="LwH6nd"]',
         'div[jsname="r5hl4d"]',
+        "div.VwiC3b",
     ]
 
     for selector in selectors:
         for element in soup.select(selector):
             text = " ".join(element.stripped_strings)
-            if len(text) >= 40 and text not in snippets:
+            if 40 <= len(text) <= 700 and text not in snippets:
                 snippets.append(text)
-
-    if not snippets:
-        for result in soup.select("div.g"):
-            text = " ".join(result.stripped_strings)
-            if 80 <= len(text) <= 600 and text not in snippets:
-                snippets.append(text)
-                if len(snippets) >= 2:
-                    break
 
     return " ".join(snippets[:2]) if snippets else ""
 
 
 @dataclass
 class UserProfileUpdate:
-    """Small profile object compatible with MemoryManager."""
-
     name: str | None = None
     nickname: str | None = None
     preferred_language: str | None = None
@@ -123,7 +122,6 @@ class AyraAssistant:
         self.intent_type = "unknown"
 
     def handle(self, message: str) -> str:
-        """Handle a user message and return AYRA's response."""
         self.used_google_search = False
         self.intent_type = "unknown"
 
@@ -146,7 +144,6 @@ class AyraAssistant:
         return self._handle_ai_chat(text, lowered)
 
     def _handle_commands(self, text: str, lowered: str) -> str | None:
-        """Handle desktop, browser, file, folder, WhatsApp, and calculator commands."""
         whatsapp_response = self._handle_whatsapp_commands(text, lowered)
         if whatsapp_response:
             return whatsapp_response
@@ -213,7 +210,7 @@ class AyraAssistant:
             if not folder_name:
                 return "Please tell me the folder name. Example: create folder ashish"
 
-            response = self.system.create_folder(folder_name)
+            response = self.system.create_folder(str(self._folder_name_to_path(folder_name)))
             if response.startswith("Created folder"):
                 self._remember_recent_folder(self._folder_name_to_path(folder_name))
             return response
@@ -232,6 +229,9 @@ class AyraAssistant:
         if self._looks_like_math(lowered):
             return self.calculator.evaluate(text)
 
+        if self._is_question_like(lowered):
+            return None
+
         router_result = self.router.route(text)
         if router_result:
             return router_result
@@ -239,7 +239,6 @@ class AyraAssistant:
         return None
 
     def _handle_whatsapp_commands(self, text: str, lowered: str) -> str | None:
-        """Handle WhatsApp commands if WhatsAppCommands is available."""
         if "whatsapp" not in lowered:
             return None
 
@@ -247,7 +246,9 @@ class AyraAssistant:
             return "WhatsApp commands are not installed. Add commands/whatsapp.py first."
 
         if lowered in {"open whatsapp", "open whatsapp web"}:
-            return self.whatsapp.open_whatsapp()
+            if hasattr(self.whatsapp, "open_whatsapp"):
+                return self.whatsapp.open_whatsapp()
+            return self.browser.open_url("https://web.whatsapp.com")
 
         if lowered.startswith("send whatsapp to "):
             parts = text[len("send whatsapp to "):].split(" message ", 1)
@@ -266,7 +267,6 @@ class AyraAssistant:
         return None
 
     def _handle_compound_file_command(self, text: str, lowered: str) -> str | None:
-        """Handle commands that create a folder and file together."""
         has_folder = "create folder" in lowered or "create a folder" in lowered or "make folder" in lowered
         has_file = "create file" in lowered or "create a file" in lowered or "make file" in lowered
 
@@ -279,17 +279,16 @@ class AyraAssistant:
         folder_name = None
 
         for part in parts:
-            part_lowered = part.lower()
-            if "folder" in part_lowered:
+            if "folder" in part.lower():
                 folder_name = self._extract_folder_name(part)
                 if folder_name:
-                    folder_response = self.system.create_folder(folder_name)
+                    folder_path = self._folder_name_to_path(folder_name)
+                    folder_response = self.system.create_folder(str(folder_path))
                     if folder_response.startswith("Created folder"):
-                        self._remember_recent_folder(self._folder_name_to_path(folder_name))
+                        self._remember_recent_folder(folder_path)
 
         for part in parts:
-            part_lowered = part.lower()
-            if "file" in part_lowered:
+            if "file" in part.lower():
                 filename, folder_hint = self._extract_file_name(part)
                 if filename:
                     target = self._build_file_target_path(filename, folder_hint or "it")
@@ -301,7 +300,6 @@ class AyraAssistant:
         return " ".join(results) if results else None
 
     def _handle_memory_commands(self, text: str, lowered: str) -> str | None:
-        """Handle notes, reminders, and profile learning commands."""
         reminder_response = self._handle_reminder_commands(text, lowered)
         if reminder_response:
             return reminder_response
@@ -317,7 +315,6 @@ class AyraAssistant:
         return None
 
     def _handle_reminder_commands(self, text: str, lowered: str) -> str | None:
-        """Handle reminder commands."""
         if lowered.startswith("remind me"):
             reminder_text = text[len("remind me"):].strip()
             if reminder_text:
@@ -345,14 +342,15 @@ class AyraAssistant:
         return None
 
     def _handle_ai_chat(self, text: str, lowered: str) -> str:
-        """Route conversation and knowledge questions through AI or search."""
         prompt_context = self.memory_prompt_builder.build(text)
         prompt = text if not prompt_context else f"{prompt_context}\nUser: {text}"
 
         if self._should_search_google(text, lowered):
             response = self._search_google_and_answer(text)
-            if not response or "couldn't search" in response.lower():
+
+            if self._is_search_failure(response):
                 response = generate_ai_response(prompt, history=self.memory.snapshot())
+
             self.used_google_search = True
             self.intent_type = "web_search"
         else:
@@ -365,25 +363,25 @@ class AyraAssistant:
         return response
 
     def _should_search_google(self, text: str, lowered: str) -> bool:
-        """Use Google only for current or explicitly verified information."""
         if self._is_explicit_search_command(lowered):
             return False
 
         if self._is_current_info_question(lowered):
             return True
 
+        if not self._is_gemini_available() and self._is_question_like(lowered):
+            return True
+
         verify_words = ["verify", "check online", "search and tell", "latest", "current"]
         return any(word in lowered for word in verify_words)
 
     def should_use_google_search(self, text: str) -> bool:
-        """Tell UI whether a background Google answer is expected."""
         lowered = text.strip().lower()
         if not lowered:
             return False
         return self._should_search_google(text, lowered)
 
     def _is_gemini_available(self) -> bool:
-        """Return True when Gemini is configured and quota is not exhausted."""
         return bool(getattr(gemini_client, "client", None)) and not getattr(
             gemini_client,
             "quota_exhausted",
@@ -391,7 +389,6 @@ class AyraAssistant:
         )
 
     def _search_google_and_answer(self, query: str) -> str:
-        """Search Google in the background and return a readable answer."""
         clean_query = query.strip()
         if not clean_query:
             return "Please ask a question so I can search Google."
@@ -401,11 +398,41 @@ class AyraAssistant:
             if summary:
                 return f"{summary}\n\nSource: Google search results"
             return "I could not find a reliable answer for that search."
-        except Exception:
-            return "I could not search Google right now."
+        except Exception as exc:
+            print("AYRA GOOGLE SEARCH ERROR:", repr(exc))
+            return "I could not search Google right now. Please check your internet connection."
+
+    def _is_search_failure(self, response: str) -> bool:
+        lowered = response.lower()
+        failure_texts = [
+            "could not search",
+            "couldn't search",
+            "could not find",
+            "please check your internet",
+        ]
+        return any(item in lowered for item in failure_texts)
+
+    def _is_question_like(self, lowered: str) -> bool:
+        question_starts = [
+            "what is",
+            "what are",
+            "who is",
+            "who are",
+            "how to",
+            "how do",
+            "how can",
+            "why",
+            "when",
+            "where",
+            "explain",
+            "define",
+            "tell me",
+            "can you explain",
+            "please explain",
+        ]
+        return lowered.endswith("?") or any(lowered.startswith(item) for item in question_starts)
 
     def _extract_folder_name(self, text: str) -> str:
-        """Extract folder name from natural language."""
         patterns = [
             r"create a folder(?: named| name| called)?\s+(.+)",
             r"create folder(?: named| name| called)?\s+(.+)",
@@ -424,7 +451,6 @@ class AyraAssistant:
         return ""
 
     def _extract_file_name(self, text: str) -> tuple[str, str | None]:
-        """Extract filename and optional folder hint."""
         patterns = [
             r"(?:create|make) (?:a )?python file(?: named| called)?\s+['\"]?(?P<filename>.+?)['\"]?(?:\s+(?:inside|in)\s+(?:the\s+)?(?P<folder>[^.]+))?$",
             r"(?:create|make) (?:a )?file(?: named| called)?\s+['\"]?(?P<filename>.+?)['\"]?(?:\s+(?:inside|in)\s+(?:the\s+)?(?P<folder>[^.]+))?$",
@@ -450,21 +476,17 @@ class AyraAssistant:
         return "", None
 
     def _folder_name_to_path(self, folder_name: str) -> Path:
-        """Convert folder name to a useful path."""
         if any(separator in folder_name for separator in ("/", "\\", ":")):
             return Path(folder_name)
         return Path.home() / "Desktop" / folder_name
 
     def _remember_recent_folder(self, folder_path: Path) -> None:
-        """Keep short-term folder context for follow-up commands."""
         self.last_folder_path = folder_path
 
     def _remember_recent_file(self, file_path: Path) -> None:
-        """Keep short-term file context for follow-up commands."""
         self.last_file_path = file_path
 
     def _build_file_target_path(self, filename: str, folder_hint: str | None) -> Path:
-        """Build the full target path for a new file."""
         if folder_hint:
             folder_path = self._resolve_folder_hint(folder_hint)
         else:
@@ -473,9 +495,8 @@ class AyraAssistant:
         return (folder_path or Path.home() / "Desktop") / filename
 
     def _resolve_folder_hint(self, folder_hint: str) -> Path | None:
-        """Resolve words like 'it', 'desktop', or folder names into a path."""
         hint = folder_hint.strip().lower()
-        if hint in {"it", "that", "there"} and self.last_folder_path:
+        if hint in {"it", "that", "there", "this folder"} and self.last_folder_path:
             return self.last_folder_path
 
         if hint in {"desktop", "my desktop", "the desktop"}:
@@ -492,7 +513,6 @@ class AyraAssistant:
         return Path.home() / "Desktop" / folder_hint
 
     def _learn_from_text(self, text: str) -> None:
-        """Store useful long-term user facts."""
         lowered = text.lower()
         profile_keywords = [
             "my name is",
@@ -519,17 +539,14 @@ class AyraAssistant:
         self.memory_manager.save_memory(text, category="profile", importance=0.8)
 
     def _is_youtube_open_command(self, lowered: str) -> bool:
-        """Return True when the user wants to open YouTube directly."""
         open_words = ["open", "launch", "start", "go to"]
         return "youtube" in lowered and any(word in lowered for word in open_words)
 
     def _is_google_open_command(self, lowered: str) -> bool:
-        """Return True when the user wants to open Google directly."""
         open_words = ["open", "launch", "start", "go to"]
         return "google" in lowered and any(word in lowered for word in open_words)
 
     def _is_current_info_question(self, lowered: str) -> bool:
-        """Return True for questions that need current information."""
         current_markers = [
             "today",
             "current",
@@ -547,7 +564,6 @@ class AyraAssistant:
         return any(marker in lowered for marker in current_markers)
 
     def _is_explicit_search_command(self, lowered: str) -> bool:
-        """Return True when the user explicitly asks to open a search page."""
         search_triggers = [
             "search google",
             "google search",
@@ -562,19 +578,16 @@ class AyraAssistant:
         return any(trigger in lowered for trigger in search_triggers)
 
     def _clean_query(self, text: str, phrases: list[str]) -> str:
-        """Remove command phrases and return the search query."""
         query = text
         for phrase in phrases:
             query = query.replace(phrase, "")
         return query.strip()
 
     def _extract_number(self, text: str) -> int | None:
-        """Extract the first integer from text."""
         match = re.search(r"\d+", text)
         return int(match.group()) if match else None
 
     def _looks_like_math(self, lowered: str) -> bool:
-        """Detect simple math expressions."""
         math_symbols = ["+", "-", "*", "/", "(", ")"]
         has_symbol = any(symbol in lowered for symbol in math_symbols)
         has_number = any(char.isdigit() for char in lowered)
