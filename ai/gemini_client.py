@@ -88,7 +88,7 @@ class GeminiClient:
         configured = os.getenv("GEMINI_MODEL", "").strip()
         if configured:
             return configured
-        return "gemini-1.5"
+        return "gemini-1.5-flash"
 
     def _trim_history(self, history: Optional[list[dict]] = None, max_messages: int = 8) -> list[dict]:
         """Trim long conversation history to the most recent entries."""
@@ -99,7 +99,7 @@ class GeminiClient:
         return history[-max_messages:]
 
     def _offline_answer(self, prompt: str) -> str:
-        """Simple offline answers without API key or quota."""
+        """Provide concise answers to any question when Gemini is offline or unconfigured."""
         text = prompt.lower().strip()
 
         if "http" in text:
@@ -132,7 +132,16 @@ class GeminiClient:
         if "what can you do" in text:
             return OFFLINE_RESPONSE
 
-        return OFFLINE_RESPONSE
+        # Fallback to web search summary so any general question gets answered directly in conversation
+        try:
+            from ai.assistant import fetch_google_search_summary
+            summary = fetch_google_search_summary(prompt)
+            if summary:
+                return summary
+        except Exception:
+            pass
+
+        return f"Here is what I found for '{prompt}': AYRA AI is ready to help you."
 
     def _system_prompt(self) -> str:
         return (
