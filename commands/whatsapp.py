@@ -5,13 +5,14 @@ import time
 import webbrowser
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
 import pyautogui
 import pywhatkit
 
 
 class WhatsAppCommands:
-    """Send WhatsApp messages using WhatsApp Web."""
+    """Send WhatsApp messages using WhatsApp Web and Desktop protocols."""
 
     def __init__(self, contacts_path: Optional[str] = None) -> None:
         project_root = Path(__file__).resolve().parent.parent
@@ -33,25 +34,39 @@ class WhatsAppCommands:
             return "Please provide a message to send."
 
         try:
-            pywhatkit.sendwhatmsg_instantly(
-                phone_no=f"+{clean_number}",
-                message=clean_message,
-                wait_time=25,
-                tab_close=False,
-                close_time=3,
-            )
-
-            time.sleep(3)
+            whatsapp_url = f"https://web.whatsapp.com/send?phone={clean_number}&text={quote(clean_message)}"
+            webbrowser.open(whatsapp_url)
+            time.sleep(4)
             pyautogui.press("enter")
-
-            return f"Sent WhatsApp message to {clean_number}."
-        except Exception as exc:
-            return f"Could not send WhatsApp message: {exc}"
+            return f"Sent WhatsApp message to +{clean_number}."
+        except Exception:
+            try:
+                pywhatkit.sendwhatmsg_instantly(
+                    phone_no=f"+{clean_number}",
+                    message=clean_message,
+                    wait_time=20,
+                    tab_close=False,
+                    close_time=3,
+                )
+                time.sleep(2)
+                pyautogui.press("enter")
+                return f"Sent WhatsApp message to +{clean_number}."
+            except Exception as exc:
+                return f"Could not send WhatsApp message: {exc}"
 
     def send_to_contact(self, contact_name: str, message: str) -> str:
         """Send a WhatsApp message to a saved contact."""
         contacts = self._load_contacts()
-        number = contacts.get(contact_name.lower().strip())
+        query = contact_name.lower().strip()
+
+        number = contacts.get(query)
+
+        if not number:
+            for name, phone in contacts.items():
+                if query in name or name in query:
+                    number = phone
+                    contact_name = name
+                    break
 
         if not number:
             return f"Contact not found: {contact_name}"
@@ -77,5 +92,8 @@ class WhatsAppCommands:
         return contacts
 
     def _clean_number(self, number: str) -> str:
-        """Keep only digits from the phone number."""
-        return "".join(char for char in number if char.isdigit())
+        """Keep only digits from the phone number and auto-add 91 for 10-digit Indian numbers."""
+        digits = "".join(char for char in number if char.isdigit())
+        if len(digits) == 10:
+            digits = "91" + digits
+        return digits
