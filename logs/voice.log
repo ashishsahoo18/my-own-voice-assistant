@@ -377,3 +377,7 @@
 2026-08-17 21:36:53,518 INFO Voice listening started
 2026-08-17 21:37:03,877 INFO Voice listening completed
 2026-08-17 21:37:06,923 INFO Speech completed
+2026-08-17 21:38:37,778 INFO Voice listening started
+2026-08-17 21:38:43,613 WARNING Speech was not recognized
+2026-08-17 21:38:43,614 INFO Voice listening completed
+2026-08-17 21:38:47,592 INFO Speech completed
