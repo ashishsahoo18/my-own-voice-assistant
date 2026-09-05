@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import webbrowser
-from urllib.parse import quote
+from urllib.parse import quote_plus
 
 
 class BrowserCommands:
@@ -20,13 +20,23 @@ class BrowserCommands:
             "stackoverflow": "https://stackoverflow.com",
             "stack overflow": "https://stackoverflow.com",
             "linkedin": "https://www.linkedin.com",
-            "chatgpt": "https://chat.openai.com",
+            "chatgpt": "https://chatgpt.com",
+            "gemini": "https://gemini.google.com",
             "whatsapp": "https://web.whatsapp.com",
             "whatsapp web": "https://web.whatsapp.com",
             "instagram": "https://www.instagram.com",
             "facebook": "https://www.facebook.com",
             "x": "https://x.com",
             "twitter": "https://x.com",
+        }
+        self.site_display_names = {
+            "chatgpt": "ChatGPT",
+            "gemini": "Gemini",
+            "gmail": "Gmail",
+            "google": "Google",
+            "youtube": "YouTube",
+            "whatsapp": "WhatsApp",
+            "whatsapp web": "WhatsApp Web",
         }
 
     def open_url(self, url: str, display_name: str | None = None) -> str:
@@ -38,8 +48,12 @@ class BrowserCommands:
         if not clean_url.startswith(("http://", "https://")):
             clean_url = f"https://{clean_url}"
 
-        webbrowser.open(clean_url)
-        return f"Opened {display_name or clean_url}."
+        try:
+            if not webbrowser.open(clean_url):
+                return f"Could not open {display_name or clean_url} in the default browser."
+            return f"Opening {display_name or clean_url}."
+        except Exception:
+            return f"Could not open {display_name or clean_url} in the default browser."
 
     def open_site(self, site_name: str) -> str:
         """Open a known website by name."""
@@ -49,8 +63,8 @@ class BrowserCommands:
         if not url:
             return self.open_url(clean_name, site_name)
 
-        webbrowser.open(url)
-        return f"Opened {site_name}."
+        display_name = self.site_display_names.get(clean_name, site_name.strip().title())
+        return self.open_url(url, display_name)
 
     def search(self, query: str) -> str:
         """Search the web using Google."""
@@ -59,25 +73,37 @@ class BrowserCommands:
     def search_google(self, query: str) -> str:
         """Search Google."""
         clean_query = query.strip() or "AYRA AI"
-        webbrowser.open(f"https://www.google.com/search?q={quote(clean_query)}")
-        return f"Searching Google for {clean_query}."
+        try:
+            opened = webbrowser.open(f"https://www.google.com/search?q={quote_plus(clean_query)}")
+            if not opened:
+                return "Could not open Google search in the default browser."
+            return f"Searching Google for {clean_query}."
+        except Exception:
+            return "Could not open Google search in the default browser."
 
     def search_youtube(self, query: str) -> str:
         """Search YouTube."""
         clean_query = query.strip() or "AYRA AI"
-        webbrowser.open(f"https://www.youtube.com/results?search_query={quote(clean_query)}")
-        return f"Searching YouTube for {clean_query}."
+        try:
+            opened = webbrowser.open(
+                f"https://www.youtube.com/results?search_query={quote_plus(clean_query)}"
+            )
+            if not opened:
+                return "Could not open YouTube search in the default browser."
+            return f"Opening YouTube search results for {clean_query}."
+        except Exception:
+            return "Could not open YouTube search in the default browser."
 
     def search_github(self, query: str) -> str:
         """Search GitHub."""
         clean_query = query.strip() or "python"
-        webbrowser.open(f"https://github.com/search?q={quote(clean_query)}")
+        webbrowser.open(f"https://github.com/search?q={quote_plus(clean_query)}")
         return f"Searching GitHub for {clean_query}."
 
     def search_stackoverflow(self, query: str) -> str:
         """Search Stack Overflow."""
         clean_query = query.strip() or "python"
-        webbrowser.open(f"https://stackoverflow.com/search?q={quote(clean_query)}")
+        webbrowser.open(f"https://stackoverflow.com/search?q={quote_plus(clean_query)}")
         return f"Searching Stack Overflow for {clean_query}."
 
     def open_google(self) -> str:
