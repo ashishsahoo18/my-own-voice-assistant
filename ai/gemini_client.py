@@ -44,6 +44,7 @@ class GeminiClient:
 
     def ask(self, prompt: str, history: Optional[list[dict]] = None) -> str:
         """Return Gemini response or offline fallback."""
+        self._last_history = history or []
         if not self.client or self.quota_exhausted:
             return self._offline_answer(prompt)
 
@@ -99,8 +100,24 @@ class GeminiClient:
         return history[-max_messages:]
 
     def _offline_answer(self, prompt: str) -> str:
-        """Provide concise answers to any question when Gemini is offline or unconfigured."""
+        """Provide useful local answers when Gemini is unavailable or optional."""
         text = prompt.lower().strip()
+        simple_request = any(phrase in text for phrase in ("simple words", "simply", "easy words"))
+
+        if "machine learning" in text or (simple_request and "machine learning" in self._recent_history_text()):
+            if simple_request:
+                return (
+                    "Machine learning is like teaching a computer with examples. "
+                    "After seeing enough examples, it can recognize a pattern and make a useful guess."
+                )
+            return (
+                "Machine learning is a part of AI where computers learn patterns from examples or data "
+                "instead of receiving a separate rule for every situation. It powers things like recommendations, "
+                "spam filters, and image recognition."
+            )
+
+        if "who created it" in text and "python" in self._recent_history_text():
+            return "Python was created by Guido van Rossum and first released in 1991."
 
         if "http" in text:
             return (
@@ -113,6 +130,21 @@ class GeminiClient:
                 "Python is a high-level programming language used for automation, "
                 "web development, data analysis, AI, and scripting."
             )
+
+        if "c++" in text:
+            return "C++ is a fast, general-purpose programming language often used for games, desktop software, systems, and performance-sensitive applications."
+
+        if "array" in text:
+            return "An array is a collection of values kept in order. You access each value using its position, called an index."
+
+        if "loop" in text:
+            return "A loop repeats a block of code. Use one when a task must happen for each item or until a condition changes."
+
+        if "recursion" in text:
+            return "Recursion is when a function solves a problem by calling itself on a smaller version of that problem, stopping at a base case."
+
+        if "backend" in text:
+            return "For backend development, start with Python or JavaScript, then learn HTTP, APIs, SQL and databases, authentication, Git, and a framework such as FastAPI, Django, Express, or NestJS. Build a small API as you learn."
 
         if "bfs" in text:
             return (
@@ -132,16 +164,14 @@ class GeminiClient:
         if "what can you do" in text:
             return OFFLINE_RESPONSE
 
-        # Fallback to web search summary so any general question gets answered directly in conversation
-        try:
-            from ai.assistant import fetch_google_search_summary
-            summary = fetch_google_search_summary(prompt)
-            if summary:
-                return summary
-        except Exception:
-            pass
+        return (
+            "I can help with that, but my optional online AI provider is unavailable right now. "
+            "Ask for a definition, explanation, or step-by-step example and I will use local knowledge where possible."
+        )
 
-        return f"Here is what I found for '{prompt}': AYRA AI is ready to help you."
+    def _recent_history_text(self) -> str:
+        """Return recent conversation text for offline follow-up questions."""
+        return " ".join(item.get("content", "").lower() for item in getattr(self, "_last_history", []))
 
     def _system_prompt(self) -> str:
         return (
