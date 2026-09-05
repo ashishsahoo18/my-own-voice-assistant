@@ -148,6 +148,13 @@ class AyraAssistant:
         if whatsapp_response:
             return whatsapp_response
 
+        # Handle deterministic desktop and browser requests locally before any
+        # conversational provider is considered. The router keeps lightweight
+        # session context for follow-up commands such as "Play Believer".
+        router_result = self.router.route(text)
+        if router_result:
+            return router_result
+
         if "youtube" in lowered and "play" in lowered:
             query = lowered
             for word in ["open", "youtube", "and", "play", "song", "music"]:
@@ -157,16 +164,6 @@ class AyraAssistant:
         if lowered.startswith("play "):
             query = text[5:].strip()
             return self.system.search_youtube(query or "music")
-
-        if self._is_youtube_open_command(lowered):
-            return self.browser.open_url("https://www.youtube.com")
-
-        if self._is_google_open_command(lowered):
-            return self.browser.open_url("https://www.google.com")
-
-        if lowered.startswith("open "):
-            app_name = text[5:].strip()
-            return self.system.open_app(app_name)
 
         if "search youtube" in lowered or "youtube search" in lowered:
             query = self._clean_query(lowered, ["search youtube", "youtube search"])
@@ -231,10 +228,6 @@ class AyraAssistant:
 
         if self._is_question_like(lowered):
             return None
-
-        router_result = self.router.route(text)
-        if router_result:
-            return router_result
 
         return None
 
@@ -398,9 +391,6 @@ class AyraAssistant:
             return False
 
         if self._is_current_info_question(lowered):
-            return True
-
-        if not self._is_gemini_available() and self._is_question_like(lowered):
             return True
 
         verify_words = ["verify", "check online", "search and tell", "latest", "current"]
