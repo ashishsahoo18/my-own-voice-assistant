@@ -19,16 +19,12 @@ def load_environment() -> None:
 
 
 def validate_environment() -> None:
-    """Show helpful startup warnings for missing optional settings."""
-    if not os.getenv("GEMINI_API_KEY"):
-        print(
-            "[AYRA AI] GEMINI_API_KEY is not set. "
-            "Add it to the .env file to enable AI responses."
-        )
-
-    model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
-    if model_name:
-        print(f"[AYRA AI] Using Gemini model: {model_name}")
+    """Report optional AI-provider status without blocking startup."""
+    if os.getenv("GEMINI_API_KEY"):
+        model_name = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+        print(f"[AYRA AI] Optional Gemini provider enabled ({model_name}).")
+    else:
+        print("[AYRA AI] Starting with local commands and offline conversation support.")
 
 
 def main() -> None:

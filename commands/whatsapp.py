@@ -7,8 +7,15 @@ from pathlib import Path
 from typing import Optional
 from urllib.parse import quote
 
-import pyautogui
-import pywhatkit
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None
+
+try:
+    import pywhatkit
+except ImportError:
+    pywhatkit = None
 
 
 class WhatsAppCommands:
@@ -20,8 +27,12 @@ class WhatsAppCommands:
 
     def open_whatsapp(self) -> str:
         """Open WhatsApp Web."""
-        webbrowser.open("https://web.whatsapp.com")
-        return "Opened WhatsApp Web."
+        try:
+            if not webbrowser.open("https://web.whatsapp.com"):
+                return "Could not open WhatsApp Web in the default browser."
+            return "Opening WhatsApp Web."
+        except Exception:
+            return "Could not open WhatsApp Web in the default browser."
 
     def send_message(self, number: str, message: str) -> str:
         """Send a WhatsApp message directly."""
@@ -34,6 +45,8 @@ class WhatsAppCommands:
             return "Please provide a message to send."
 
         try:
+            if pyautogui is None:
+                return "WhatsApp Web opened, but automatic sending needs pyautogui installed."
             whatsapp_url = f"https://web.whatsapp.com/send?phone={clean_number}&text={quote(clean_message)}"
             webbrowser.open(whatsapp_url)
             time.sleep(4)
@@ -41,6 +54,8 @@ class WhatsAppCommands:
             return f"Sent WhatsApp message to +{clean_number}."
         except Exception:
             try:
+                if pywhatkit is None or pyautogui is None:
+                    return "Could not send the WhatsApp message because the optional automation packages are unavailable."
                 pywhatkit.sendwhatmsg_instantly(
                     phone_no=f"+{clean_number}",
                     message=clean_message,
@@ -96,4 +111,4 @@ class WhatsAppCommands:
         digits = "".join(char for char in number if char.isdigit())
         if len(digits) == 10:
             digits = "91" + digits
-        return digits
+        return digits
