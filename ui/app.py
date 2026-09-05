@@ -386,22 +386,13 @@ class AyraApp(ctk.CTk):
         self.after(1000, lambda: self.ai_state_var.set("READY"))
 
     def _update_startup_status(self) -> None:
-        """Update startup status based on Gemini configuration."""
-        if self.settings.is_gemini_configured:
-            self.status_var.set("● ONLINE")
-        else:
-            self.status_var.set("● NEEDS API KEY")
+        """AYRA remains available when the optional Gemini provider is absent."""
+        self.status_var.set("● ONLINE")
 
     def _monitor_gemini_status(self) -> None:
-        """Periodic check to reflect Gemini client's quota/exhaustion state in the UI."""
+        """Keep the UI available even when Gemini is not configured."""
         try:
-            if getattr(gemini_client, "quota_exhausted", False):
-                self.status_var.set("● OFFLINE")
-            else:
-                if self.settings.is_gemini_configured:
-                    self.status_var.set("● ONLINE")
-                else:
-                    self.status_var.set("● NEEDS API KEY")
+            self.status_var.set("● ONLINE")
         except Exception:
             # Keep current status if anything goes wrong
             pass

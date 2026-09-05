@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Callable
 from pathlib import Path
 
@@ -32,6 +33,7 @@ class CommandRouter:
         self.news = NewsCommands()
         self.whatsapp = WhatsAppCommands()
         self.windows = WindowsCommands()
+        self.current_service: str | None = None
         self.logger = self._create_logger()
 
     def _create_logger(self) -> logging.Logger:
@@ -63,8 +65,21 @@ class CommandRouter:
         self.logger.info("Command: %s", text)
 
         try:
-            if lowered.startswith("open "):
-                return self._route_open(lowered[5:].strip())
+            open_match = re.match(r"^(?:open|go to|launch|start)\s+(?:the\s+)?(.+)$", lowered)
+            if open_match:
+                return self._route_open(open_match.group(1))
+
+            play_match = re.match(r"^play\s+(.+)$", text, flags=re.IGNORECASE)
+            if play_match:
+                return self._play_youtube(play_match.group(1))
+
+            youtube_search = re.match(
+                r"^(?:search\s+youtube\s+for|search\s+for)\s+(.+?)\s+(?:on\s+)?youtube$",
+                text,
+                flags=re.IGNORECASE,
+            )
+            if youtube_search:
+                return self._search_youtube(youtube_search.group(1))
 
             if lowered.startswith("search "):
                 return self._route_search(lowered[7:].strip())
@@ -95,24 +110,15 @@ class CommandRouter:
         if not target:
             return "What should I open?"
 
-        websites = {
-            "youtube": self.browser.open_youtube,
-            "google": self.browser.open_google,
-            "gmail": self.browser.open_gmail,
-            "github": lambda: self.browser.open_site("github"),
-            "linkedin": self.browser.open_linkedin,
-            "chatgpt": self.browser.open_chatgpt,
-            "google drive": self.browser.open_drive,
-            "drive": self.browser.open_drive,
-            "whatsapp": self.whatsapp.open_whatsapp,
-            "whatsapp web": self.whatsapp.open_whatsapp,
-        }
+        clean_target = re.sub(r"\s+(?:website|site|app)$", "", target).strip()
+        if clean_target in self.browser.sites:
+            self.current_service = clean_target
+            return self.browser.open_site(clean_target)
 
-        handler = websites.get(target)
-        if handler:
-            return handler()
+        if clean_target in {"desktop", "documents", "downloads", "pictures", "videos"}:
+            return self.files.open_folder(clean_target)
 
-        return self.windows.open_app(target)
+        return self.windows.open_app(clean_target)
 
     def _route_search(self, query: str) -> str:
         """Route search commands."""
@@ -129,6 +135,9 @@ class CommandRouter:
         for keywords, handler in search_routes:
             if any(keyword in query for keyword in keywords):
                 return handler(query)
+
+        if self.current_service == "youtube":
+            return self._search_youtube(query)
 
         return self.browser.search(query)
 
@@ -243,7 +252,16 @@ class CommandRouter:
         return ""
 
     def _search_youtube(self, query: str) -> str:
-        clean_query = query.replace("youtube", "").strip()
+        clean_query = re.sub(r"\b(?:search|for|on|youtube)\b", "", query, flags=re.IGNORECASE).strip()
+        self.current_service = "youtube"
+        return self.browser.search_youtube(clean_query)
+
+    def _play_youtube(self, query: str) -> str:
+        """Open YouTube search results without claiming browser playback succeeded."""
+        clean_query = query.strip()
+        if not clean_query:
+            return "What would you like me to play on YouTube?"
+        self.current_service = "youtube"
         return self.browser.search_youtube(clean_query)
 
     def _search_github(self, query: str) -> str:
