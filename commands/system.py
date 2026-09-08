@@ -7,7 +7,7 @@ import subprocess
 import webbrowser
 from pathlib import Path
 from typing import Optional
-from urllib.parse import quote
+from urllib.parse import quote, quote_plus
 
 
 class SystemCommands:
@@ -105,8 +105,17 @@ class SystemCommands:
     def search_google(self, query: str) -> str:
         """Search Google in the default browser."""
         clean_query = query.strip() or "AYRA AI"
-        webbrowser.open(f"https://www.google.com/search?q={quote(clean_query)}")
-        return f"Searching Google for {clean_query}."
+        encoded_query = quote_plus(clean_query)
+        url = f"https://www.google.com/search?q={encoded_query}"
+        try:
+            try:
+                browser = webbrowser.get("firefox")
+                browser.open(url)
+            except Exception:
+                webbrowser.open(url)
+            return f"Searching Google for {clean_query}."
+        except Exception:
+            return f"Could not open Google search in browser."
 
     def search_youtube(self, query: str) -> str:
         """Search YouTube in the default browser."""
