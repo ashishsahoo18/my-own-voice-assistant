@@ -151,3 +151,15 @@ AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
 2026-09-05 11:41:56,264 INFO Command: open vs code
 2026-09-05 11:41:57,558 INFO Command: open notepad
 2026-09-05 11:42:02,657 INFO Command: What is basic knowledge?
+2026-09-07 20:42:17,114 INFO Command: Open Google
+2026-09-07 20:42:17,124 INFO Command: Open YouTube
+2026-09-07 20:42:17,130 INFO Command: Search YouTube for Python tutorials
+2026-09-07 20:42:17,135 INFO Command: Open YouTube
+2026-09-07 20:42:17,135 INFO Command: Play Believer
+2026-09-07 20:42:17,159 INFO Command: Open Google
+2026-09-07 20:42:17,164 INFO Command: Open Notepad
+2026-09-07 20:47:58,784 INFO Command: open YouTube and play song
+2026-09-07 20:48:11,637 INFO Command: open YouTube
+2026-09-07 20:48:25,203 INFO Command: and play any
+2026-09-07 20:49:20,844 INFO Command: open Notepad
+2026-09-07 20:49:29,657 INFO Command: open Facebook
