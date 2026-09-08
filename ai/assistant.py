@@ -121,6 +121,59 @@ class AyraAssistant:
         self.last_file_path: Path | None = None
         self.intent_type = "unknown"
 
+    def determine_intent(self, text: str) -> str:
+        """Categorize user intent before execution."""
+        lowered = text.strip().lower()
+
+        if self._is_question_like(lowered) and not self._is_action_command(lowered):
+            return "CONVERSATION"
+
+        if lowered.startswith("play ") or "play " in lowered:
+            return "YOUTUBE_PLAY"
+
+        if "search youtube" in lowered or "youtube search" in lowered:
+            return "YOUTUBE_SEARCH"
+
+        open_words = ("open", "launch", "go to", "start", "run")
+        if any(lowered.startswith(w + " ") for w in open_words):
+            target = re.sub(r"^(?:open|launch|go to|start|run)\s+(?:the\s+)?", "", lowered).strip()
+            clean = re.sub(r"\s+(?:website|site|app|application)$", "", target).strip()
+            if clean in self.browser.sites:
+                return "OPEN_WEBSITE"
+            return "OPEN_APPLICATION"
+
+        if "search google" in lowered or "google search" in lowered or lowered.startswith("search "):
+            return "SEARCH_WEB"
+
+        if any(k in lowered for k in ("create folder", "create file", "delete folder", "delete file", "list files", "rename file")):
+            return "FILE_COMMAND"
+
+        if any(k in lowered for k in ("screenshot", "volume", "mute", "lock computer", "shutdown", "restart")):
+            return "WINDOWS_COMMAND"
+
+        if any(k in lowered for k in ("remind me", "take a note", "show reminders")):
+            return "PRODUCTIVITY_COMMAND"
+
+        if "whatsapp" in lowered:
+            return "EXISTING_COMMANDS"
+
+        return "CONVERSATION"
+
+    def _is_action_command(self, lowered: str) -> bool:
+        action_prefixes = (
+            "open ",
+            "launch ",
+            "go to ",
+            "start ",
+            "run ",
+            "play ",
+            "create ",
+            "delete ",
+            "remind ",
+            "take a note ",
+        )
+        return any(lowered.startswith(p) for p in action_prefixes)
+
     def handle(self, message: str) -> str:
         self.used_google_search = False
         self.intent_type = "unknown"
@@ -130,17 +183,28 @@ class AyraAssistant:
             return "Please say something so I can help."
 
         lowered = text.lower()
+        intent = self.determine_intent(text)
+        self.intent_type = intent
 
-        command_response = self._handle_commands(text, lowered)
-        if command_response:
-            self.intent_type = "local_action"
-            return command_response
+        if intent == "CONVERSATION":
+            memory_response = self._handle_memory_commands(text, lowered)
+            if memory_response:
+                return memory_response
+            return self._handle_ai_chat(text, lowered)
+
+        try:
+            command_response = self._handle_commands(text, lowered)
+            if command_response:
+                return command_response
+        except Exception as exc:
+            print("AYRA COMMAND ERROR:", repr(exc))
+            return "I'm not sure what you mean. Could you say that another way?"
 
         memory_response = self._handle_memory_commands(text, lowered)
         if memory_response:
-            self.intent_type = "memory_action"
             return memory_response
 
+        # Fallback to chat if action wasn't handled by commands
         return self._handle_ai_chat(text, lowered)
 
     def _handle_commands(self, text: str, lowered: str) -> str | None:
@@ -226,9 +290,6 @@ class AyraAssistant:
         if self._looks_like_math(lowered):
             return self.calculator.evaluate(text)
 
-        if self._is_question_like(lowered):
-            return None
-
         return None
 
     def _handle_whatsapp_commands(self, text: str, lowered: str) -> str | None:
@@ -243,7 +304,6 @@ class AyraAssistant:
                 return self.whatsapp.open_whatsapp()
             return self.browser.open_url("https://web.whatsapp.com")
 
-        # Flexible pattern matching for WhatsApp direct messages
         patterns = [
             r"^send whatsapp to (?P<contact>[^:\s]+(?:\s+[^:\s]+)*?)\s+(?:message|text|msg|saying)?\s*:?\s*(?P<msg>.+)$",
             r"^message (?P<contact>[^:\s]+(?:\s+[^:\s]+)*?)\s+on whatsapp\s+(?:message|text|msg|saying)?\s*:?\s*(?P<msg>.+)$",
@@ -266,27 +326,11 @@ class AyraAssistant:
 
                 if "contact" in groups and groups["contact"]:
                     contact_name = groups["contact"].strip()
-
-                    # Check if contact_name is actually phone digits
                     clean_contact_digits = "".join(c for c in contact_name if c.isdigit())
                     if len(clean_contact_digits) >= 10 and len(clean_contact_digits) == len(contact_name.replace("+", "").strip()):
                         return self.whatsapp.send_message(clean_contact_digits, msg)
 
                     return self.whatsapp.send_to_contact(contact_name, msg)
-
-        # Legacy fallback split format
-        if "to" in lowered and ("message" in lowered or "msg" in lowered):
-            if "whatsapp" in lowered:
-                after_whatsapp = text
-                for kw in ["send whatsapp to", "whatsapp to", "send message to", "message"]:
-                    if kw in lowered:
-                        parts = re.split(r"\s+(?:message|msg|text|saying)\s+|\s*:\s*", text, maxsplit=1, flags=re.IGNORECASE)
-                        if len(parts) == 2:
-                            contact_part = parts[0]
-                            for prefix in ["send whatsapp to", "whatsapp to", "send message to", "message", "on whatsapp"]:
-                                contact_part = re.sub(prefix, "", contact_part, flags=re.IGNORECASE).strip()
-                            if contact_part and parts[1].strip():
-                                return self.whatsapp.send_to_contact(contact_part, parts[1].strip())
 
         return None
 
@@ -300,7 +344,6 @@ class AyraAssistant:
         parts = [part.strip() for part in text.split(" and ", 1)]
         folder_response = None
         file_response = None
-        folder_name = None
 
         for part in parts:
             if "folder" in part.lower():
@@ -432,26 +475,6 @@ class AyraAssistant:
             "please check your internet",
         ]
         return any(item in lowered for item in failure_texts)
-
-    def _is_question_like(self, lowered: str) -> bool:
-        question_starts = [
-            "what is",
-            "what are",
-            "who is",
-            "who are",
-            "how to",
-            "how do",
-            "how can",
-            "why",
-            "when",
-            "where",
-            "explain",
-            "define",
-            "tell me",
-            "can you explain",
-            "please explain",
-        ]
-        return lowered.endswith("?") or any(lowered.startswith(item) for item in question_starts)
 
     def _extract_folder_name(self, text: str) -> str:
         patterns = [
@@ -613,3 +636,27 @@ class AyraAssistant:
         has_symbol = any(symbol in lowered for symbol in math_symbols)
         has_number = any(char.isdigit() for char in lowered)
         return has_symbol and has_number
+
+    def _is_question_like(self, lowered: str) -> bool:
+        question_starts = [
+            "what is",
+            "what are",
+            "who is",
+            "who are",
+            "how to",
+            "how do",
+            "how can",
+            "why",
+            "when",
+            "where",
+            "explain",
+            "define",
+            "tell me",
+            "can you explain",
+            "please explain",
+            "difference between",
+            "why is it",
+            "give me an example",
+            "give an example",
+        ]
+        return lowered.endswith("?") or any(lowered.startswith(item) for item in question_starts)
