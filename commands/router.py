@@ -65,7 +65,7 @@ class CommandRouter:
         self.logger.info("Command: %s", text)
 
         try:
-            open_match = re.match(r"^(?:open|go to|launch|start)\s+(?:the\s+)?(.+)$", lowered)
+            open_match = re.match(r"^(?:open|go to|launch|start|run)\s+(?:the\s+)?(.+)$", lowered)
             if open_match:
                 return self._route_open(open_match.group(1))
 
@@ -74,12 +74,13 @@ class CommandRouter:
                 return self._play_youtube(play_match.group(1))
 
             youtube_search = re.match(
-                r"^(?:search\s+youtube\s+for|search\s+for)\s+(.+?)\s+(?:on\s+)?youtube$",
+                r"^(?:search\s+youtube\s+for|search\s+youtube\s+|search\s+for\s+(.+?)\s+on\s+youtube|youtube\s+search\s+)(.+)$",
                 text,
                 flags=re.IGNORECASE,
             )
             if youtube_search:
-                return self._search_youtube(youtube_search.group(1))
+                query = youtube_search.group(2) if youtube_search.group(2) else youtube_search.group(1)
+                return self._search_youtube(query)
 
             if lowered.startswith("search "):
                 return self._route_search(lowered[7:].strip())
@@ -110,15 +111,19 @@ class CommandRouter:
         if not target:
             return "What should I open?"
 
-        clean_target = re.sub(r"\s+(?:website|site|app)$", "", target).strip()
+        clean_target = re.sub(r"\s+(?:website|site|app|application)$", "", target).strip()
         if clean_target in self.browser.sites:
             self.current_service = clean_target
             return self.browser.open_site(clean_target)
 
         if clean_target in {"desktop", "documents", "downloads", "pictures", "videos"}:
+            self.current_service = clean_target
             return self.files.open_folder(clean_target)
 
-        return self.windows.open_app(clean_target)
+        app_res = self.windows.open_app(clean_target)
+        if not app_res.startswith("I do not support"):
+            self.current_service = clean_target
+        return app_res
 
     def _route_search(self, query: str) -> str:
         """Route search commands."""
@@ -138,7 +143,12 @@ class CommandRouter:
 
         if self.current_service == "youtube":
             return self._search_youtube(query)
+        elif self.current_service == "github":
+            return self._search_github(query)
+        elif self.current_service == "stackoverflow":
+            return self._search_stackoverflow(query)
 
+        self.current_service = "google"
         return self.browser.search(query)
 
     def _route_file_commands(self, text: str, lowered: str) -> str:
