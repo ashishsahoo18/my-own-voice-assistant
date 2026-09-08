@@ -2,9 +2,11 @@
   "voice_enabled": true,
   "auto_speaking": true,
   "auto_send_voice": true,
-  "voice_id": null,
+  "voice_id": "",
   "speech_rate": 170,
   "volume": 1.0,
   "language": "en",
-  "wake_word": "hey ayra"
+  "wake_word": "hey Ashish",
+  "wake_word_enabled": true,
+  "push_to_talk_enabled": true
 }
