@@ -73,13 +73,17 @@ class BrowserCommands:
     def search_google(self, query: str) -> str:
         """Search Google."""
         clean_query = query.strip() or "AYRA AI"
+        encoded_query = quote_plus(clean_query)
+        url = f"https://www.google.com/search?q={encoded_query}"
         try:
-            opened = webbrowser.open(f"https://www.google.com/search?q={quote_plus(clean_query)}")
-            if not opened:
-                return "Could not open Google search in the default browser."
+            try:
+                browser = webbrowser.get("firefox")
+                browser.open(url)
+            except Exception:
+                webbrowser.open(url)
             return f"Searching Google for {clean_query}."
         except Exception:
-            return "Could not open Google search in the default browser."
+            return f"Could not open Google search in browser."
 
     def search_youtube(self, query: str) -> str:
         """Search YouTube."""
