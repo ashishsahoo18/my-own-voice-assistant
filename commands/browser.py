@@ -90,7 +90,7 @@ class BrowserCommands:
             )
             if not opened:
                 return "Could not open YouTube search in the default browser."
-            return f"Opening YouTube search results for {clean_query}."
+            return f"Opening YouTube results for {clean_query}."
         except Exception:
             return "Could not open YouTube search in the default browser."
 
