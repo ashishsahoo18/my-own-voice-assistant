@@ -35,6 +35,7 @@ class GeminiClient:
         self.model = self._resolve_model_name()
         self.client = None
         self.quota_exhausted = False
+        self._last_history: list[dict] = []
 
         if self.api_key and genai is not None and types is not None:
             try:
@@ -102,21 +103,65 @@ class GeminiClient:
     def _offline_answer(self, prompt: str) -> str:
         """Provide useful local answers when Gemini is unavailable or optional."""
         text = prompt.lower().strip()
-        simple_request = any(phrase in text for phrase in ("simple words", "simply", "easy words"))
+        recent_context = self._recent_history_text()
+        simple_request = any(phrase in text for phrase in ("simple words", "simply", "easy words", "simple"))
 
-        if "machine learning" in text or (simple_request and "machine learning" in self._recent_history_text()):
-            if simple_request:
-                return (
-                    "Machine learning is like teaching a computer with examples. "
-                    "After seeing enough examples, it can recognize a pattern and make a useful guess."
-                )
+        # Follow-up context checking
+        is_about_python = "python" in text or "python" in recent_context
+        is_about_ml = "machine learning" in text or "ml" in recent_context or "machine learning" in recent_context
+        is_about_array = "array" in text or "arrays" in text or "array" in recent_context
+
+        if "classification" in text and "regression" in text:
             return (
-                "Machine learning is a part of AI where computers learn patterns from examples or data "
-                "instead of receiving a separate rule for every situation. It powers things like recommendations, "
-                "spam filters, and image recognition."
+                "Classification predicts discrete categories or labels (e.g., Spam vs Not Spam, Cat vs Dog), "
+                "while Regression predicts continuous numerical values (e.g., predicting house prices or temperature)."
             )
 
-        if "who created it" in text and "python" in self._recent_history_text():
+        if ("why" in text and "useful" in text) or ("why is it useful" in text):
+            if is_about_python:
+                return (
+                    "Python is useful because it has a clean and simple syntax, a massive ecosystem of libraries "
+                    "(for AI, web development, and data science), strong community support, and great cross-platform portability."
+                )
+            if is_about_ml:
+                return (
+                    "Machine learning is useful because it automates decision-making from data, enables predictive analytics, "
+                    "and solves complex problems that are hard to program manually with fixed rules."
+                )
+
+        if "example" in text or "give me an example" in text or "sample" in text:
+            if is_about_python:
+                return (
+                    "Here is a simple Python example:\n\n"
+                    "```python\n"
+                    "def greet(name):\n"
+                    '    return f"Hello, {name}!"\n\n'
+                    'print(greet("World"))\n'
+                    "```"
+                )
+            if is_about_ml:
+                return (
+                    "An example of Machine Learning is an email spam filter: it analyzes thousands of emails marked "
+                    "as 'spam' or 'not spam' to automatically flag suspicious incoming messages."
+                )
+            if is_about_array:
+                return (
+                    "An array example in Python list notation: `numbers = [10, 20, 30, 40]`. "
+                    "Accessing `numbers[0]` gives `10`."
+                )
+
+        if "machine learning" in text or (simple_request and "machine learning" in recent_context):
+            if simple_request or "simply" in text:
+                return (
+                    "Machine learning is like teaching a computer with examples. "
+                    "After seeing enough examples, it can recognize patterns and make smart predictions."
+                )
+            return (
+                "Machine learning is a subset of artificial intelligence focused on building systems that learn "
+                "from data to improve performance over time without being explicitly programmed."
+            )
+
+        if "who created it" in text and is_about_python:
             return "Python was created by Guido van Rossum and first released in 1991."
 
         if "http" in text:
@@ -127,15 +172,18 @@ class GeminiClient:
 
         if "python" in text:
             return (
-                "Python is a high-level programming language used for automation, "
-                "web development, data analysis, AI, and scripting."
+                "Python is a high-level, general-purpose programming language known for readability and versatility "
+                "in web development, data science, AI, and automation."
             )
 
         if "c++" in text:
             return "C++ is a fast, general-purpose programming language often used for games, desktop software, systems, and performance-sensitive applications."
 
-        if "array" in text:
-            return "An array is a collection of values kept in order. You access each value using its position, called an index."
+        if "array" in text or "arrays" in text:
+            return (
+                "An array is a data structure that stores a collection of elements (values or variables), "
+                "each identified by an array index or key. In Python, lists are commonly used as dynamic arrays."
+            )
 
         if "loop" in text:
             return "A loop repeats a block of code. Use one when a task must happen for each item or until a condition changes."
@@ -165,8 +213,7 @@ class GeminiClient:
             return OFFLINE_RESPONSE
 
         return (
-            "I can help with that, but my optional online AI provider is unavailable right now. "
-            "Ask for a definition, explanation, or step-by-step example and I will use local knowledge where possible."
+            "I can help with that! Ask me any question, or tell me an action like opening a website or app."
         )
 
     def _recent_history_text(self) -> str:
