@@ -41,7 +41,7 @@ class VoiceSettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             header,
-            text="AYRA Settings",
+            text="ASHISH AI Settings",
             font=("Segoe UI", 26, "bold"),
             text_color="#f8fbff",
             anchor="w",
