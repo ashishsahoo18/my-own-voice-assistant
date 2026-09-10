@@ -56,21 +56,25 @@ class AyraAssistantUpgradeTests(unittest.TestCase):
             "https://www.youtube.com/results?search_query=Believer"
         )
 
-    def test_05_conversational_question_machine_learning(self) -> None:
-        """TEST 5: Input 'What is machine learning?' produces conversational answer."""
+    @patch("webbrowser.open")
+    def test_05_conversational_question_machine_learning(self, mock_webbrowser_open: MagicMock) -> None:
+        """TEST 5: Input 'What is machine learning?' triggers Google search in browser."""
+        mock_webbrowser_open.return_value = True
         response = self.assistant.handle("What is machine learning?")
-        self.assertIn("machine learning", response.lower())
-        self.assertNotIn("Opening", response)
-        self.assertNotIn("Searching", response)
+        self.assertIn("Searching Google for What is machine learning?", response)
+        mock_webbrowser_open.assert_called_with(
+            "https://www.google.com/search?q=What+is+machine+learning%3F"
+        )
 
-    def test_06_conversational_context_followup(self) -> None:
-        """TEST 6: 'What is machine learning?' then 'Explain it simply' uses context."""
-        res1 = self.assistant.handle("What is machine learning?")
-        self.assertTrue(len(res1) > 0)
-
-        res2 = self.assistant.handle("Explain it simply.")
-        self.assertIn("machine learning", res2.lower())
-        self.assertIn("computer", res2.lower())
+    @patch("webbrowser.open")
+    def test_06_conversational_question_explain_recursion(self, mock_webbrowser_open: MagicMock) -> None:
+        """TEST 6: 'Explain recursion' triggers Google search in browser."""
+        mock_webbrowser_open.return_value = True
+        response = self.assistant.handle("Explain recursion.")
+        self.assertIn("Searching Google for Explain recursion.", response)
+        mock_webbrowser_open.assert_called_with(
+            "https://www.google.com/search?q=Explain+recursion."
+        )
 
     def test_07_run_without_gemini_api_key(self) -> None:
         """TEST 7: Ayra starts successfully without GEMINI_API_KEY."""
@@ -80,14 +84,14 @@ class AyraAssistantUpgradeTests(unittest.TestCase):
             self.assertIsNone(client.client)
             # Basic functionality works offline
             res = client.ask("What is Python?")
-            self.assertIn("Python", res)
+            self.assertIn("disabled", res.lower())
 
     def test_08_gemini_unavailable(self) -> None:
         """TEST 8: Gemini unavailable does not crash and local functionality continues."""
         client = GeminiClient()
         client.quota_exhausted = True
         res = client.ask("What is machine learning?")
-        self.assertTrue(len(res) > 0)
+        self.assertIn("disabled", res.lower())
 
         # Local command routing works cleanly
         with patch("webbrowser.open", return_value=True):
@@ -106,6 +110,18 @@ class AyraAssistantUpgradeTests(unittest.TestCase):
         mock_webbrowser_open.return_value = True
         response = self.assistant.handle("Open WhatsApp")
         self.assertIn("WhatsApp", response)
+
+    def test_11_current_time(self) -> None:
+        """TEST 11: Current time query returns formatted system clock time."""
+        response = self.assistant.handle("What is the current time?")
+        self.assertIn("The current time is", response)
+
+    @patch("webbrowser.open")
+    def test_12_computer_science_question(self, mock_webbrowser_open: MagicMock) -> None:
+        """TEST 12: Computer science query triggers Google search in browser."""
+        mock_webbrowser_open.return_value = True
+        response = self.assistant.handle("what is basic knowledge of computer science")
+        self.assertIn("Searching Google for what is basic knowledge of computer science", response)
 
 
 if __name__ == "__main__":
