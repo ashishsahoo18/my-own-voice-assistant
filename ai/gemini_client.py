@@ -1,29 +1,30 @@
-"""AI and offline Q&A answer generation removed per specification.
-All normal questions are now routed directly to web search.
-"""
+"""Gemini AI Client integration for ASHISH AI."""
 
 from __future__ import annotations
 
 from typing import Optional
 from collections.abc import Generator
+from ai.ai_service import AIService
 
-OFFLINE_RESPONSE = (
-    "AI conversation answering has been disabled. "
-    "All normal questions are searched directly on Google."
-)
+OFFLINE_RESPONSE = "AI service is currently unavailable. Please set GEMINI_API_KEY in .env."
 
 
 class GeminiClient:
-    """Stub client - AI Q&A answering is disabled."""
+    """Wrapper around AIService for backward compatibility."""
 
     def __init__(self) -> None:
-        self.api_key = ""
-        self.client = None
-        self.quota_exhausted = True
+        self.ai_service = AIService()
+
+    @property
+    def api_key(self) -> str:
+        return self.ai_service.api_key
+
+    @property
+    def client(self) -> any:
+        return self.ai_service.client
 
     def ask(self, prompt: str, history: Optional[list[dict]] = None) -> str:
-        """AI Q&A answering disabled; returns search notice."""
-        return OFFLINE_RESPONSE
+        return self.ai_service.ask(prompt)
 
     def stream(self, prompt: str, history: Optional[list[dict]] = None) -> Generator[str, None, None]:
         yield self.ask(prompt, history)
@@ -33,12 +34,10 @@ client = GeminiClient()
 
 
 def generate_ai_response(prompt: str, history: list[dict[str, str]] | None = None) -> str:
-    """Disabled AI response generator."""
     return client.ask(prompt, history)
 
 
 def ask_ai(prompt: str, history: Optional[list[dict]] = None) -> str:
-    """Disabled AI response wrapper."""
     return client.ask(prompt, history)
 
 
