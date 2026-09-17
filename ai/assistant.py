@@ -6,32 +6,19 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote_plus
 
-try:
-    import requests
-except ImportError:
-    requests = None
-
-try:
-    from bs4 import BeautifulSoup
-except ImportError:
-    BeautifulSoup = None
-
-from ai.gemini_client import client as gemini_client, generate_ai_response
+from ai.ai_service import AIService
 from ai.memory import ConversationMemory
 from ai.memory_manager import MemoryManager
 from ai.memory_prompt import MemoryPromptBuilder
 from commands.browser import BrowserCommands
 from commands.calculator import Calculator
+from commands.contacts import ContactManager
+from commands.email_service import EmailService
 from commands.reminders import ReminderCommands
 from commands.router import CommandRouter
 from commands.system import SystemCommands
-
-try:
-    from commands.whatsapp import WhatsAppCommands
-except ImportError:
-    WhatsAppCommands = None
+from commands.whatsapp import WhatsAppCommands
 
 
 @dataclass
@@ -51,19 +38,22 @@ class UserProfileUpdate:
 
 
 class AshishAssistant:
-    """Route user requests to Windows commands, Web search, YouTube, File operations, or Productivity."""
+    """Route user requests to Windows commands, Web search, YouTube, File operations, Communication, or AI Q&A."""
 
     def __init__(self) -> None:
         self.memory = ConversationMemory()
         self.memory_manager = MemoryManager()
         self.memory_prompt_builder = MemoryPromptBuilder(self.memory_manager)
 
+        self.contacts = ContactManager()
         self.browser = BrowserCommands()
         self.calculator = Calculator()
         self.reminders = ReminderCommands()
         self.system = SystemCommands()
+        self.whatsapp = WhatsAppCommands(self.contacts)
+        self.email_service = EmailService(self.contacts)
+        self.ai_service = AIService()
         self.router = CommandRouter()
-        self.whatsapp = WhatsAppCommands() if WhatsAppCommands else None
 
         self.used_google_search = False
         self.last_folder_path: Path | None = None
@@ -76,6 +66,12 @@ class AshishAssistant:
 
         if any(w in lowered for w in ("shutdown", "restart")):
             return "DANGEROUS_COMMAND"
+
+        if "whatsapp" in lowered or (lowered.startswith("message ") and "saying" in lowered):
+            return "WHATSAPP"
+
+        if "email" in lowered or lowered.startswith("mail "):
+            return "EMAIL"
 
         if lowered.startswith("play ") or "play " in lowered or "youtube" in lowered:
             return "YOUTUBE"
@@ -100,7 +96,10 @@ class AshishAssistant:
         if "search google" in lowered or "google search" in lowered or lowered.startswith("search "):
             return "WEB_SEARCH"
 
-        return "WEB_SEARCH"
+        if self.router._is_ai_question(lowered):
+            return "AI"
+
+        return "AI"
 
     def is_dangerous_command(self, text: str) -> tuple[bool, str]:
         """Check if command requires explicit user confirmation."""
@@ -139,17 +138,35 @@ class AshishAssistant:
         if memory_response:
             return memory_response
 
-        return self._handle_web_search_fallback(text, lowered)
+        # AI Q&A Fallback (does not open browser/ChatGPT)
+        return self.ai_service.ask(text)
 
-    def execute_confirmed_command(self, command_text: str) -> str:
-        """Execute a dangerous command after user confirmation."""
-        lowered = command_text.strip().lower()
+    def execute_confirmed_command(self, command_payload: str) -> str:
+        """Execute a WhatsApp, Email, or dangerous command after user confirmation."""
+        text = command_payload.strip()
+
+        if text.startswith("CONFIRMATION_REQUIRED:WHATSAPP:") or text.startswith("WHATSAPP:"):
+            payload = text.split(":", 2)[-1]
+            parts = payload.split("|")
+            if len(parts) >= 3:
+                recipient, phone, message = parts[0], parts[1], parts[2]
+                return self.whatsapp.send_message(phone, message)
+
+        if text.startswith("CONFIRMATION_REQUIRED:EMAIL:") or text.startswith("EMAIL:"):
+            payload = text.split(":", 2)[-1]
+            parts = payload.split("|")
+            if len(parts) >= 4:
+                recipient, email, subject, message = parts[0], parts[1], parts[2], parts[3]
+                return self.email_service.send_email(email, subject, message)
+
+        lowered = text.lower()
         if "shutdown" in lowered:
             return self.system.shutdown()
         if "restart" in lowered:
             return self.system.restart()
         if "delete file" in lowered:
-            return self.system.create_file("deleted_placeholder.txt")  # safe execution
+            return self.system.create_file("deleted_placeholder.txt")
+
         return "Command executed."
 
     def _handle_time_date_commands(self, text: str, lowered: str) -> str | None:
@@ -170,10 +187,6 @@ class AshishAssistant:
         time_date_res = self._handle_time_date_commands(text, lowered)
         if time_date_res:
             return time_date_res
-
-        whatsapp_response = self._handle_whatsapp_commands(text, lowered)
-        if whatsapp_response:
-            return whatsapp_response
 
         router_result = self.router.route(text)
         if router_result:
@@ -252,20 +265,6 @@ class AshishAssistant:
 
         return None
 
-    def _handle_whatsapp_commands(self, text: str, lowered: str) -> str | None:
-        if "whatsapp" not in lowered and not lowered.startswith("message "):
-            return None
-
-        if self.whatsapp is None:
-            return "WhatsApp commands module unavailable."
-
-        if lowered in {"open whatsapp", "open whatsapp web"}:
-            if hasattr(self.whatsapp, "open_whatsapp"):
-                return self.whatsapp.open_whatsapp()
-            return self.browser.open_url("https://web.whatsapp.com")
-
-        return None
-
     def _handle_compound_file_command(self, text: str, lowered: str) -> str | None:
         has_folder = "create folder" in lowered or "create a folder" in lowered or "make folder" in lowered
         has_file = "create file" in lowered or "create a file" in lowered or "make file" in lowered
@@ -328,14 +327,6 @@ class AshishAssistant:
 
         return None
 
-    def _handle_web_search_fallback(self, text: str, lowered: str) -> str:
-        response = self.browser.search_google(text)
-        self.used_google_search = True
-        self.intent_type = "WEB_SEARCH"
-        self.memory.add_user_message(text)
-        self.memory.add_assistant_message(response)
-        return response
-
     def _extract_folder_name(self, text: str) -> str:
         patterns = [
             r"create a folder(?: named| name| called)?\s+(.+)",
@@ -381,10 +372,6 @@ class AshishAssistant:
         for phrase in phrases:
             query = query.replace(phrase, "")
         return query.strip()
-
-    def _extract_number(self, text: str) -> int | None:
-        match = re.search(r"\d+", text)
-        return int(match.group()) if match else None
 
     def _looks_like_math(self, lowered: str) -> bool:
         math_symbols = ["+", "-", "*", "/"]
