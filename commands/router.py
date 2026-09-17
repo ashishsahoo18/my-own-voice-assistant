@@ -1,4 +1,4 @@
-"""Command router for AYRA AI automation modules."""
+"""Command router for AYRA/ASHISH AI automation modules."""
 
 from __future__ import annotations
 
@@ -7,8 +7,11 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
+from ai.ai_service import AIService
 from commands.browser import BrowserCommands
 from commands.clipboard import ClipboardCommands
+from commands.contacts import ContactManager
+from commands.email_service import EmailService
 from commands.files import FileCommands
 from commands.news import NewsCommands
 from commands.productivity import ProductivityCommands
@@ -20,9 +23,10 @@ from commands.windows import WindowsCommands
 
 
 class CommandRouter:
-    """Route user intent to the correct automation module."""
+    """Route user intent to the correct automation module with priority ordering."""
 
     def __init__(self) -> None:
+        self.contacts = ContactManager()
         self.browser = BrowserCommands()
         self.files = FileCommands()
         self.system = SystemCommands()
@@ -31,7 +35,9 @@ class CommandRouter:
         self.screenshot = ScreenshotCommands()
         self.weather = WeatherCommands()
         self.news = NewsCommands()
-        self.whatsapp = WhatsAppCommands()
+        self.whatsapp = WhatsAppCommands(self.contacts)
+        self.email_service = EmailService(self.contacts)
+        self.ai_service = AIService()
         self.windows = WindowsCommands()
         self.current_service: str | None = None
         self.logger = self._create_logger()
@@ -65,10 +71,23 @@ class CommandRouter:
         self.logger.info("Command: %s", text)
 
         try:
+            # 1. WhatsApp & Email Confirmation Commands
+            if "whatsapp" in lowered or (lowered.startswith("message ") and "saying" in lowered):
+                res = self.whatsapp.prepare_whatsapp_command(text)
+                if res:
+                    return res
+
+            if "email" in lowered or lowered.startswith("mail "):
+                res = self.email_service.prepare_email_command(text)
+                if res:
+                    return res
+
+            # 2. Open Commands (Websites & Apps & Folders)
             open_match = re.match(r"^(?:open|go to|launch|start|run)\s+(?:the\s+)?(.+)$", lowered)
             if open_match:
                 return self._route_open(open_match.group(1))
 
+            # 3. YouTube Direct Play vs Search
             play_match = re.match(r"^play\s+(.+)$", text, flags=re.IGNORECASE)
             if play_match:
                 return self._play_youtube(play_match.group(1))
@@ -83,24 +102,33 @@ class CommandRouter:
                 query = groups[-1] if groups else text
                 return self._search_youtube(query)
 
+            # 4. Search Routing
             if lowered.startswith("search "):
                 return self._route_search(lowered[7:].strip())
 
+            # 5. File Commands
             file_result = self._route_file_commands(text, lowered)
             if file_result:
                 return file_result
 
+            # 6. System Commands
             system_result = self._route_system_commands(lowered)
             if system_result:
                 return system_result
 
+            # 7. Web, Weather, News
             web_result = self._route_web_commands(lowered)
             if web_result:
                 return web_result
 
+            # 8. Windows Commands
             windows_result = self._route_windows_commands(lowered)
             if windows_result:
                 return windows_result
+
+            # 9. AI Questions (what is, explain, difference between, how does, etc.)
+            if self._is_ai_question(lowered):
+                return self.ai_service.ask(text)
 
             return ""
         except Exception as exc:
@@ -261,6 +289,15 @@ class CommandRouter:
             return self.windows.restart_explorer()
 
         return ""
+
+    def _is_ai_question(self, lowered: str) -> bool:
+        """Determine if query is an AI Q&A question."""
+        ai_triggers = [
+            "what is", "what are", "explain ", "how to ", "difference between",
+            "why does", "tell me about", "define ", "who is ", "where is ",
+            "how does", "what does"
+        ]
+        return any(lowered.startswith(trig) or f" {trig}" in lowered for trig in ai_triggers) or lowered.endswith("?")
 
     def _search_youtube(self, query: str) -> str:
         clean_query = re.sub(r"\b(?:search|for|on|youtube)\b", "", query, flags=re.IGNORECASE).strip()
