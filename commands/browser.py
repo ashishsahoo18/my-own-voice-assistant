@@ -87,16 +87,13 @@ class BrowserCommands:
 
     def search_youtube(self, query: str) -> str:
         """Search YouTube."""
-        clean_query = query.strip() or "AYRA AI"
-        try:
-            opened = webbrowser.open(
-                f"https://www.youtube.com/results?search_query={quote_plus(clean_query)}"
-            )
-            if not opened:
-                return "Could not open YouTube search in the default browser."
-            return f"Opening YouTube results for {clean_query}."
-        except Exception:
-            return "Could not open YouTube search in the default browser."
+        from commands.youtube import YouTubeCommands
+        return YouTubeCommands().search_youtube(query)
+
+    def play_youtube(self, query: str) -> str:
+        """Play video on YouTube."""
+        from commands.youtube import YouTubeCommands
+        return YouTubeCommands().play_youtube(query)
 
     def search_github(self, query: str) -> str:
         """Search GitHub."""

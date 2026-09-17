@@ -183,11 +183,11 @@ class AshishAssistant:
             query = lowered
             for word in ["open", "youtube", "and", "play", "song", "music"]:
                 query = query.replace(word, "")
-            return self.system.search_youtube(query.strip() or "music")
+            return self.system.play_youtube(query.strip() or "music")
 
         if lowered.startswith("play "):
             query = text[5:].strip()
-            return self.system.search_youtube(query or "music")
+            return self.system.play_youtube(query or "music")
 
         if "search youtube" in lowered or "youtube search" in lowered:
             query = self._clean_query(lowered, ["search youtube", "youtube search"])

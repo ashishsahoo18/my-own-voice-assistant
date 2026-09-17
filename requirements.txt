@@ -1,4 +1,4 @@
-"customtkinter>=5.2.2
+customtkinter>=5.2.2
 Pillow>=10.2.0
 python-dotenv>=1.0.1
 requests>=2.31.0
@@ -8,5 +8,4 @@ pyttsx3>=2.90
 opencv-python>=4.9.0.80
 pyperclip>=1.8.2
 psutil>=5.9.8
-pyaudio>=0.2.14 ; platform_system != \"Linux\"
-"
+pyaudio>=0.2.14 ; platform_system != "Linux"

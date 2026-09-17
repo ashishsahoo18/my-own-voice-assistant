@@ -42,19 +42,23 @@ class AyraAssistantUpgradeTests(unittest.TestCase):
             "https://www.youtube.com/results?search_query=Python+tutorials"
         )
 
+    @patch("commands.youtube.YouTubeCommands.get_video_id", return_value="7wtfhZwyrC0")
     @patch("webbrowser.open")
-    def test_04_youtube_context_remembered(self, mock_webbrowser_open: MagicMock) -> None:
-        """TEST 4: Open YouTube, then Play Believer remembers YouTube context."""
+    def test_04_youtube_play_direct(self, mock_webbrowser_open: MagicMock, mock_get_video_id: MagicMock) -> None:
+        """TEST 4: Play command opens direct video watch URL and returns Playing status."""
         mock_webbrowser_open.return_value = True
 
         res1 = self.assistant.handle("Open YouTube")
         self.assertIn("YouTube", res1)
 
-        res2 = self.assistant.handle("Play Believer")
-        self.assertIn("YouTube results for Believer", res2)
-        mock_webbrowser_open.assert_called_with(
-            "https://www.youtube.com/results?search_query=Believer"
-        )
+        res2 = self.assistant.handle("Play Ik Mulaqaat")
+        self.assertIn("Playing Ik Mulaqaat", res2)
+
+        res3 = self.assistant.handle("Play Believer")
+        self.assertIn("Playing Believer", res3)
+
+        res4 = self.assistant.handle("Search Believer on YouTube")
+        self.assertIn("YouTube results for Believer", res4)
 
     @patch("webbrowser.open")
     def test_05_conversational_question_machine_learning(self, mock_webbrowser_open: MagicMock) -> None:

@@ -74,12 +74,13 @@ class CommandRouter:
                 return self._play_youtube(play_match.group(1))
 
             youtube_search = re.match(
-                r"^(?:search\s+youtube\s+for|search\s+youtube\s+|search\s+for\s+(.+?)\s+on\s+youtube|youtube\s+search\s+)(.+)$",
+                r"^(?:search\s+youtube\s+for\s+|search\s+youtube\s+|search\s+for\s+(.+?)\s+on\s+youtube|search\s+(.+?)\s+on\s+youtube|youtube\s+search\s+)(.+)?$",
                 text,
                 flags=re.IGNORECASE,
             )
             if youtube_search:
-                query = youtube_search.group(2) if youtube_search.group(2) else youtube_search.group(1)
+                groups = [g for g in youtube_search.groups() if g is not None]
+                query = groups[-1] if groups else text
                 return self._search_youtube(query)
 
             if lowered.startswith("search "):
@@ -267,12 +268,12 @@ class CommandRouter:
         return self.browser.search_youtube(clean_query)
 
     def _play_youtube(self, query: str) -> str:
-        """Open YouTube search results without claiming browser playback succeeded."""
+        """Find and play video on YouTube."""
         clean_query = query.strip()
         if not clean_query:
             return "What would you like me to play on YouTube?"
         self.current_service = "youtube"
-        return self.browser.search_youtube(clean_query)
+        return self.browser.play_youtube(clean_query)
 
     def _search_github(self, query: str) -> str:
         clean_query = query.replace("github", "").strip()
