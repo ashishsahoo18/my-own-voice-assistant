@@ -16,7 +16,7 @@ except ImportError:
 
 try:
     import pywhatkit
-except ImportError:
+except Exception:
     pywhatkit = None
 
 try:
