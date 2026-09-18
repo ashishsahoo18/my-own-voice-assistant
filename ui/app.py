@@ -25,12 +25,21 @@ ctk.set_default_color_theme("blue")
 
 
 class ConfirmationModal(ctk.CTkToplevel):
-    """Modal dialog for dangerous Windows commands confirmation."""
+    """Modal dialog for dangerous commands, WhatsApp, and Email confirmation."""
 
-    def __init__(self, parent: ctk.CTk, title: str, message: str, on_confirm, on_cancel) -> None:
+    def __init__(
+        self,
+        parent: ctk.CTk,
+        title: str,
+        message: str,
+        on_confirm,
+        on_cancel,
+        confirm_text: str = "CONFIRM",
+        accent_color: str = "#ff3b30",
+    ) -> None:
         super().__init__(parent)
         self.title(title)
-        self.geometry("480x240")
+        self.geometry("520x280")
         self.resizable(False, False)
         self.configure(fg_color="#080e1e")
 
@@ -43,26 +52,36 @@ class ConfirmationModal(ctk.CTkToplevel):
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        # Warning icon/title
+        # Header with icon and title
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.grid(row=0, column=0, sticky="ew", padx=24, pady=(20, 10))
 
         ctk.CTkLabel(
             header,
-            text="⚠️ SYSTEM SECURITY CONFIRMATION",
+            text=f"⚠️ {title.upper()}",
             font=("Segoe UI", 14, "bold"),
-            text_color="#ff5555",
+            text_color=accent_color,
         ).pack(anchor="w")
 
-        # Message
-        ctk.CTkLabel(
+        # Message container
+        msg_frame = ctk.CTkFrame(
             self,
+            fg_color="#0d182e",
+            corner_radius=10,
+            border_width=1,
+            border_color="#1d2e4a",
+        )
+        msg_frame.grid(row=1, column=0, padx=24, pady=10, sticky="nsew")
+
+        ctk.CTkLabel(
+            msg_frame,
             text=message,
-            font=("Segoe UI", 13),
+            font=("Segoe UI", 12),
             text_color="#ffffff",
-            wraplength=420,
+            wraplength=450,
             justify="left",
-        ).grid(row=1, column=0, padx=24, pady=10, sticky="nw")
+            anchor="w",
+        ).pack(padx=14, pady=12, fill="both", expand=True)
 
         # Action buttons
         button_bar = ctk.CTkFrame(self, fg_color="transparent")
@@ -84,11 +103,11 @@ class ConfirmationModal(ctk.CTkToplevel):
 
         ctk.CTkButton(
             button_bar,
-            text="CONFIRM",
+            text=confirm_text,
             height=42,
             corner_radius=10,
-            fg_color="#ff3b30",
-            hover_color="#ff5e55",
+            fg_color=accent_color,
+            hover_color="#33ddff" if accent_color == "#00d2ff" else "#20b858",
             font=("Segoe UI", 12, "bold"),
             command=self._confirm,
         ).grid(row=0, column=1, padx=(8, 0), sticky="ew")
@@ -367,14 +386,24 @@ class AshishApp(ctk.CTk):
         elif state == "ERROR":
             self.state_label.configure(text_color="#ff4444")
 
-    def show_confirmation_modal(self, message: str, on_confirm, on_cancel) -> None:
-        """Show dangerous command confirmation modal dialog."""
+    def show_confirmation_modal(
+        self,
+        title: str = "ASHISH AI Confirmation",
+        message: str = "",
+        on_confirm = None,
+        on_cancel = None,
+        confirm_text: str = "CONFIRM",
+        accent_color: str = "#ff3b30",
+    ) -> None:
+        """Show dynamic command confirmation modal dialog."""
         ConfirmationModal(
             self,
-            title="ASHISH AI Security Confirmation",
+            title=title,
             message=message,
             on_confirm=on_confirm,
             on_cancel=on_cancel,
+            confirm_text=confirm_text,
+            accent_color=accent_color,
         )
 
     def _start_orb_animation(self) -> None:
