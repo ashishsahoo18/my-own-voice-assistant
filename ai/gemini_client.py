@@ -1,12 +1,12 @@
-"""Gemini AI Client integration for ASHISH AI."""
+"""Local AI Client integration for ASHISH AI."""
 
 from __future__ import annotations
 
 from typing import Optional
 from collections.abc import Generator
-from ai.ai_service import AIService
+from ai.ai_service import AIService, UNAVAILABLE_MESSAGE
 
-OFFLINE_RESPONSE = "AI service is currently unavailable. Please set GEMINI_API_KEY in .env."
+OFFLINE_RESPONSE = UNAVAILABLE_MESSAGE
 
 
 class GeminiClient:
@@ -17,11 +17,11 @@ class GeminiClient:
 
     @property
     def api_key(self) -> str:
-        return self.ai_service.api_key
+        return ""
 
     @property
     def client(self) -> any:
-        return self.ai_service.client
+        return None
 
     def ask(self, prompt: str, history: Optional[list[dict]] = None) -> str:
         return self.ai_service.ask(prompt)
