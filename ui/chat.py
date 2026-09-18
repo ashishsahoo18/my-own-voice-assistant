@@ -334,7 +334,7 @@ class CommandConsolePanel(ctk.CTkFrame):
         self._request_in_flight = True
         self._set_state("PROCESSING")
 
-        # Check dangerous command requirement
+        # 1. Dangerous command requirement check (shutdown, restart, delete file)
         is_dangerous, confirm_msg = self.assistant.is_dangerous_command(command)
         if is_dangerous and self.request_confirmation:
             self._set_state("SPEAKING")
@@ -345,11 +345,81 @@ class CommandConsolePanel(ctk.CTkFrame):
             ).start()
 
             self.request_confirmation(
-                confirm_msg,
-                on_confirm=lambda: self._execute_confirmed(command),
-                on_cancel=lambda: self._cancel_confirmed(command),
+                title="System Security Confirmation",
+                message=confirm_msg,
+                on_confirm=lambda: self._execute_confirmed(command, "DANGEROUS_COMMAND"),
+                on_cancel=lambda: self._cancel_confirmed(command, "DANGEROUS_COMMAND", "Command cancelled by user."),
+                confirm_text="CONFIRM",
+                accent_color="#ff3b30",
             )
             return
+
+        # 2. WhatsApp confirmation requirement check
+        lowered = command.lower().strip()
+        if "whatsapp" in lowered or (lowered.startswith("message ") and "saying" in lowered):
+            prep_res = self.assistant.whatsapp.prepare_whatsapp_command(command)
+            if prep_res.startswith("CONFIRMATION_REQUIRED:WHATSAPP:"):
+                payload = prep_res.split(":", 2)[-1]
+                parts = payload.split("|")
+                display_name, phone_number, message_text = parts[0], parts[1], parts[2]
+
+                msg_display = f"Send WhatsApp message?\n\nTo: {display_name} (+{phone_number})\nMessage: \"{message_text}\""
+
+                if self.request_confirmation:
+                    self._set_state("SPEAKING")
+                    threading.Thread(
+                        target=self.voice_manager.speak,
+                        args=(f"Send WhatsApp message to {display_name}?",),
+                        daemon=True,
+                    ).start()
+
+                    self.request_confirmation(
+                        title="Confirm WhatsApp Message",
+                        message=msg_display,
+                        on_confirm=lambda: self._execute_confirmed(prep_res, "WHATSAPP"),
+                        on_cancel=lambda: self._cancel_confirmed(command, "WHATSAPP", "WhatsApp message was not sent."),
+                        confirm_text="SEND",
+                        accent_color="#25D366",
+                    )
+                    return
+            elif prep_res:
+                self._log_console_entry(command, "WHATSAPP", prep_res, "FAILED")
+                self._speak_confirmation(prep_res)
+                self._request_in_flight = False
+                return
+
+        # 3. Email confirmation requirement check
+        if "email" in lowered or lowered.startswith("mail "):
+            prep_res = self.assistant.email_service.prepare_email_command(command)
+            if prep_res.startswith("CONFIRMATION_REQUIRED:EMAIL:"):
+                payload = prep_res.split(":", 2)[-1]
+                parts = payload.split("|")
+                display_name, email_addr, subject_text, message_text = parts[0], parts[1], parts[2], parts[3]
+
+                msg_display = f"Send Email?\n\nTo: {display_name} ({email_addr})\nSubject: {subject_text}\nMessage: \"{message_text}\""
+
+                if self.request_confirmation:
+                    self._set_state("SPEAKING")
+                    threading.Thread(
+                        target=self.voice_manager.speak,
+                        args=(f"Send email to {display_name}?",),
+                        daemon=True,
+                    ).start()
+
+                    self.request_confirmation(
+                        title="Confirm Email",
+                        message=msg_display,
+                        on_confirm=lambda: self._execute_confirmed(prep_res, "EMAIL"),
+                        on_cancel=lambda: self._cancel_confirmed(command, "EMAIL", "Email was not sent."),
+                        confirm_text="SEND",
+                        accent_color="#ea4335",
+                    )
+                    return
+            elif prep_res:
+                self._log_console_entry(command, "EMAIL", prep_res, "FAILED")
+                self._speak_confirmation(prep_res)
+                self._request_in_flight = False
+                return
 
         threading.Thread(
             target=self._run_assistant_command,
@@ -357,15 +427,19 @@ class CommandConsolePanel(ctk.CTkFrame):
             daemon=True,
         ).start()
 
-    def _execute_confirmed(self, command: str) -> None:
+    def _execute_confirmed(self, payload: str, intent_override: str = "COMMAND") -> None:
         self._set_state("EXECUTING")
-        res = self.assistant.execute_confirmed_command(command)
-        self._log_console_entry(command, "DANGEROUS_COMMAND", res, "SUCCESS")
+        res = self.assistant.execute_confirmed_command(payload)
+        status = "SUCCESS" if ("Sent" in res or "sent" in res or "Executed" in res or "Opened" in res or "created" in res.lower()) else ("OPENED — MESSAGE NOT SENT" if "OPENED" in res else "FAILED")
+        self.after(0, self._log_console_entry, payload, intent_override, res, status)
         self._speak_confirmation(res)
+        self._request_in_flight = False
 
-    def _cancel_confirmed(self, command: str) -> None:
+    def _cancel_confirmed(self, command: str, intent_override: str = "COMMAND", cancel_msg: str = "Command cancelled by user.") -> None:
         self._set_state("READY")
-        self._log_console_entry(command, "DANGEROUS_COMMAND", "Command cancelled by user.", "CANCELLED")
+        self.after(0, self._log_console_entry, command, intent_override, cancel_msg, "CANCELLED")
+        self._speak_confirmation(cancel_msg)
+        self._request_in_flight = False
 
     def _run_assistant_command(self, command: str) -> None:
         try:
@@ -373,13 +447,20 @@ class CommandConsolePanel(ctk.CTkFrame):
             reply = self.assistant.handle(command)
             intent = getattr(self.assistant, "intent_type", "COMMAND")
 
-            self.after(0, self._log_console_entry, command, intent, reply, "SUCCESS")
+            status = "SUCCESS"
+            if reply.startswith("YOUTUBE") and "FAILED" in reply:
+                status = "FAILED"
+            elif "OPENED" in reply and "NOT SENT" in reply:
+                status = "OPENED — MESSAGE NOT SENT"
+            elif "ERROR" in reply or "unavailable" in reply:
+                status = "FAILED"
+
+            self.after(0, self._log_console_entry, command, intent, reply, status)
             self._speak_confirmation(reply)
         except Exception as exc:
             print("ASHISH AI EXECUTION ERROR:", repr(exc))
             self.after(0, self._log_console_entry, command, "ERROR", f"Error: {exc}", "FAILED")
             self._set_state("ERROR")
-            self.after(2000, lambda: self._set_state("READY"))
         finally:
             self._request_in_flight = False
 
