@@ -1,4 +1,4 @@
-"""Comprehensive automated tests for AYRA AI upgrade requirements."""
+"""Comprehensive automated tests for ASHISH AI upgrade requirements."""
 
 from __future__ import annotations
 
@@ -6,15 +6,16 @@ import os
 import unittest
 from unittest.mock import MagicMock, patch
 
-from ai.assistant import AyraAssistant
-from ai.gemini_client import GeminiClient
+from ai.assistant import AshishAssistant
+from ai.ai_service import AIService, UNAVAILABLE_MESSAGE
+from commands.contacts import ContactManager
 
 
-class AyraAssistantUpgradeTests(unittest.TestCase):
-    """Test suite covering all 10 required test scenarios for Ayra AI upgrade."""
+class AshishAssistantUpgradeTests(unittest.TestCase):
+    """Test suite covering all required test scenarios for Ashish AI upgrade."""
 
     def setUp(self) -> None:
-        self.assistant = AyraAssistant()
+        self.assistant = AshishAssistant()
 
     @patch("webbrowser.open")
     def test_01_open_google(self, mock_webbrowser_open: MagicMock) -> None:
@@ -61,71 +62,78 @@ class AyraAssistantUpgradeTests(unittest.TestCase):
         self.assertIn("YouTube results for Believer", res4)
 
     @patch("webbrowser.open")
-    def test_05_conversational_question_machine_learning(self, mock_webbrowser_open: MagicMock) -> None:
-        """TEST 5: Input 'What is machine learning?' triggers Google search in browser."""
+    def test_05_social_account_shortcuts(self, mock_webbrowser_open: MagicMock) -> None:
+        """TEST 5: Open GitHub, LinkedIn, Instagram, Flipkart shortcuts."""
         mock_webbrowser_open.return_value = True
-        response = self.assistant.handle("What is machine learning?")
-        self.assertIn("Searching Google for What is machine learning?", response)
-        mock_webbrowser_open.assert_called_with(
-            "https://www.google.com/search?q=What+is+machine+learning%3F"
-        )
 
-    @patch("webbrowser.open")
-    def test_06_conversational_question_explain_recursion(self, mock_webbrowser_open: MagicMock) -> None:
-        """TEST 6: 'Explain recursion' triggers Google search in browser."""
-        mock_webbrowser_open.return_value = True
-        response = self.assistant.handle("Explain recursion.")
-        self.assertIn("Searching Google for Explain recursion.", response)
-        mock_webbrowser_open.assert_called_with(
-            "https://www.google.com/search?q=Explain+recursion."
-        )
+        res_gh = self.assistant.handle("Open GitHub")
+        self.assertIn("GitHub", res_gh)
 
-    def test_07_run_without_gemini_api_key(self) -> None:
-        """TEST 7: Ayra starts successfully without GEMINI_API_KEY."""
-        with patch.dict(os.environ, {"GEMINI_API_KEY": ""}, clear=False):
-            client = GeminiClient()
-            self.assertEqual(client.api_key, "")
-            self.assertIsNone(client.client)
-            # Basic functionality works offline
-            res = client.ask("What is Python?")
-            self.assertIn("disabled", res.lower())
+        res_li = self.assistant.handle("Open my LinkedIn")
+        self.assertIn("LinkedIn", res_li)
 
-    def test_08_gemini_unavailable(self) -> None:
-        """TEST 8: Gemini unavailable does not crash and local functionality continues."""
-        client = GeminiClient()
-        client.quota_exhausted = True
-        res = client.ask("What is machine learning?")
-        self.assertIn("disabled", res.lower())
+        res_fk = self.assistant.handle("Open Flipkart")
+        self.assertIn("Flipkart", res_fk)
 
-        # Local command routing works cleanly
-        with patch("webbrowser.open", return_value=True):
-            res_cmd = self.assistant.handle("Open Google")
-            self.assertIn("Google", res_cmd)
+    def test_06_whatsapp_confirmation_preparation(self) -> None:
+        """TEST 6: WhatsApp command triggers confirmation payload with recipient and message."""
+        res = self.assistant.handle("Send WhatsApp message to Maa saying I am coming home")
+        self.assertTrue(res.startswith("CONFIRMATION_REQUIRED:WHATSAPP:"))
+        self.assertIn("Maa", res)
+        self.assertIn("I am coming home", res)
+
+    def test_07_email_confirmation_preparation(self) -> None:
+        """TEST 7: Email command triggers confirmation payload with recipient and message."""
+        res = self.assistant.handle("Send an email to Maa saying meeting update")
+        self.assertTrue(res.startswith("CONFIRMATION_REQUIRED:EMAIL:"))
+        self.assertIn("Maa", res)
+        self.assertIn("meeting update", res)
+
+    def test_08_contact_ambiguity_detection(self) -> None:
+        """TEST 8: Multiple contacts with same query prompt for clarification."""
+        contacts = ContactManager()
+        res = contacts.resolve_contact("Rahul")
+        self.assertTrue(res.is_ambiguous)
+        self.assertIn("Which 'Rahul' do you mean?", res.error_message)
+
+    @patch("requests.post")
+    @patch("requests.get")
+    def test_09_local_ai_question_answering(self, mock_get: MagicMock, mock_post: MagicMock) -> None:
+        """TEST 9: Local AI Q&A handles technical questions without opening browser."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = {"models": [{"name": "llama3.2"}]}
+        mock_get.return_value = mock_get_resp
+
+        mock_post_resp = MagicMock()
+        mock_post_resp.status_code = 200
+        mock_post_resp.json.return_value = {
+            "message": {
+                "role": "assistant",
+                "content": "Polymorphism allows objects of different classes to be treated as objects of a common superclass."
+            }
+        }
+        mock_post.return_value = mock_post_resp
+
+        res = self.assistant.handle("What is polymorphism in C++?")
+        self.assertIn("Polymorphism allows", res)
+
+    def test_10_local_ai_offline_fallback(self) -> None:
+        """TEST 10: Local AI when offline returns clear status message without crashing."""
+        with patch("requests.get", side_effect=Exception("Ollama Offline")):
+            res = self.assistant.handle("What is recursion?")
+            self.assertEqual(res, "Local AI is offline. Please start Ollama.")
 
     @patch("subprocess.Popen")
-    def test_09_open_notepad(self, mock_popen: MagicMock) -> None:
-        """TEST 9: Input 'Open Notepad' triggers Notepad launcher."""
+    def test_11_open_notepad(self, mock_popen: MagicMock) -> None:
+        """TEST 11: Input 'Open Notepad' triggers Notepad launcher."""
         response = self.assistant.handle("Open Notepad")
         self.assertIn("notepad", response.lower())
 
-    @patch("webbrowser.open")
-    def test_10_open_whatsapp(self, mock_webbrowser_open: MagicMock) -> None:
-        """TEST 10: Input 'Open WhatsApp' triggers WhatsApp browser/launcher."""
-        mock_webbrowser_open.return_value = True
-        response = self.assistant.handle("Open WhatsApp")
-        self.assertIn("WhatsApp", response)
-
-    def test_11_current_time(self) -> None:
-        """TEST 11: Current time query returns formatted system clock time."""
+    def test_12_current_time(self) -> None:
+        """TEST 12: Current time query returns formatted system clock time."""
         response = self.assistant.handle("What is the current time?")
         self.assertIn("The current time is", response)
-
-    @patch("webbrowser.open")
-    def test_12_computer_science_question(self, mock_webbrowser_open: MagicMock) -> None:
-        """TEST 12: Computer science query triggers Google search in browser."""
-        mock_webbrowser_open.return_value = True
-        response = self.assistant.handle("what is basic knowledge of computer science")
-        self.assertIn("Searching Google for what is basic knowledge of computer science", response)
 
 
 if __name__ == "__main__":
