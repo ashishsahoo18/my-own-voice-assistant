@@ -7,7 +7,7 @@ def test_yt_search(query):
     print(f"Testing search for: {query}")
     # Method 1: pywhatkit search
     try:
-        url = pywhatkit.playonyt(query, open_web=False)
+        url = pywhatkit.playonyt(query, open_video=False)
         print(f"pywhatkit URL: {url}")
     except Exception as e:
         print(f"pywhatkit error: {e}")
