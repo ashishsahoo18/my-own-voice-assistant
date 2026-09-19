@@ -1,9 +1,9 @@
 {
   "voice_enabled": true,
-  "auto_speaking": true,
+  "auto_speaking": false,
   "auto_send_voice": true,
   "voice_id": "",
-  "speech_rate": 170,
+  "speech_rate": 148,
   "volume": 1.0,
   "language": "en",
   "wake_word": "hey Ashish",
