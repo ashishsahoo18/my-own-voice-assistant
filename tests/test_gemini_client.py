@@ -1,6 +1,7 @@
 import os
 import unittest
 from unittest.mock import MagicMock, patch
+import requests
 from ai.ai_service import AIService
 
 
@@ -71,6 +72,28 @@ class LocalAIServiceHealthCheckTests(unittest.TestCase):
         ai_service = AIService()
         res = ai_service.ask("Hello Ashish AI")
         self.assertIn("Hello! I am ASHISH AI", res)
+
+    @patch("requests.post")
+    @patch("requests.get")
+    def test_ai_service_timeout_handling(self, mock_get: MagicMock, mock_post: MagicMock) -> None:
+        """When Ollama request times out, returns clear user-friendly message."""
+        mock_get_resp = MagicMock()
+        mock_get_resp.status_code = 200
+        mock_get_resp.json.return_value = {"models": [{"name": "llama3.2:latest"}]}
+        mock_get.return_value = mock_get_resp
+
+        mock_post.side_effect = requests.exceptions.ReadTimeout("Read timed out. (read timeout=120.0)")
+
+        ai_service = AIService()
+        self.assertEqual(ai_service.timeout, 120.0)
+        res = ai_service.ask("What is quantum computing?")
+        self.assertEqual(res, "Local AI is taking longer than expected. Please try again.")
+
+    def test_ai_service_custom_timeout_env(self) -> None:
+        """OLLAMA_TIMEOUT env var configures the timeout value."""
+        with patch.dict(os.environ, {"OLLAMA_TIMEOUT": "60"}, clear=False):
+            ai_service = AIService()
+            self.assertEqual(ai_service.timeout, 60.0)
 
 
 if __name__ == "__main__":
