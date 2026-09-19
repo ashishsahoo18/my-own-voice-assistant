@@ -29,6 +29,10 @@ class AIService:
         self.logger = logging.getLogger("ashish.ai_service")
         self.configured_url = os.getenv("OLLAMA_URL", "http://localhost:11434").strip().rstrip("/")
         self.configured_model = os.getenv("OLLAMA_MODEL", "llama3.2").strip()
+        try:
+            self.timeout = float(os.getenv("OLLAMA_TIMEOUT", "120").strip())
+        except (ValueError, TypeError):
+            self.timeout = 120.0
 
     def check_health(self) -> tuple[bool, str, str, list[str], str]:
         """Perform health check on local Ollama service.
@@ -133,7 +137,7 @@ class AIService:
                 },
             }
 
-            resp = requests.post(chat_endpoint, json=payload, timeout=15.0)
+            resp = requests.post(chat_endpoint, json=payload, timeout=self.timeout)
 
             if resp.status_code == 200:
                 data = resp.json()
@@ -152,7 +156,7 @@ class AIService:
                     "num_predict": 300,
                 },
             }
-            gen_resp = requests.post(generate_endpoint, json=gen_payload, timeout=15.0)
+            gen_resp = requests.post(generate_endpoint, json=gen_payload, timeout=self.timeout)
             if gen_resp.status_code == 200:
                 gen_data = gen_resp.json()
                 if "response" in gen_data:
@@ -162,4 +166,11 @@ class AIService:
 
         except Exception as exc:
             self.logger.warning("Ollama query exception: %s", exc)
+            if (
+                (requests and isinstance(exc, requests.exceptions.Timeout))
+                or isinstance(exc, TimeoutError)
+                or "timed out" in str(exc).lower()
+                or "timeout" in str(exc).lower()
+            ):
+                return "Local AI is taking longer than expected. Please try again."
             return f"Local AI query failed: {exc}"
