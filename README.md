@@ -215,8 +215,7 @@ ASHISH-AI/
 │   ├── memory.py               # In-memory conversation state buffer
 │   ├── memory_manager.py       # User profile and memory persistence logic
 │   ├── memory_prompt.py        # Memory context prompt builder
-│   ├── openaiclient.py         # Disabled cloud client stub
-│   └── prompts.py              # Prompt definitions placeholder
+│   └── openaiclient.py         # Disabled cloud client stub
 ├── assets/                     # Visual assets and design references
 ├── commands/
 │   ├── __init__.py
@@ -396,6 +395,9 @@ OLLAMA_TIMEOUT=120
 # Gmail SMTP Settings (Optional - used for automated background email sending)
 GMAIL_SENDER_EMAIL=your_email@gmail.com
 GMAIL_APP_PASSWORD=your_16_character_app_password
+
+# NewsData API (Optional - used for news headline lookup)
+NEWSDATA_API_KEY=your_newsdata_api_key
 ```
 
 > ⚠️ **Security Warning**: Never commit your `.env` file or your Gmail App Passwords to version control. The repository's `.gitignore` excludes `.env` by default.
