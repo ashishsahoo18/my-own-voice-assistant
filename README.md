@@ -45,3 +45,43 @@ Example:
 "Play Believer on YouTube"
 "What is an operating system?"
 "Search C++ recursion on Google"
+
+🧠 Local AI
+
+ASHISH AI uses Ollama to run AI locally on the computer.
+
+Current model:
+llama3.2
+
+Architecture:
+User
+ ↓
+ASHISH AI
+ ↓
+Intent Router
+ ↓
+Local AI Service
+ ↓
+Ollama
+ ↓
+Llama 3.2
+ ↓
+Response
+ ↓
+Voice / Dashboard
+
+🔐 Privacy
+
+The local AI system does not require:
+
+Gemini API key
+OpenAI API key
+Cloud AI API
+
+AI requests can be processed locally through Ollama.
+
+▶️ YouTube Control
+
+ASHISH AI supports two different YouTube commands.
+
+Play a video
