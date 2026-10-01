@@ -1,6 +1,6 @@
 {
   "voice_enabled": true,
-  "auto_speaking": false,
+  "auto_speaking": true,
   "auto_send_voice": true,
   "voice_id": "",
   "speech_rate": 148,
