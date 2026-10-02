@@ -498,3 +498,8 @@ AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
 2026-09-30 21:18:37,475 INFO Command: what is data structure and algorithm
 2026-09-30 21:18:42,039 INFO Command: what is data structure and algorithm
 2026-09-30 21:21:20,956 INFO Command: What is database
+2026-10-01 19:32:13,169 INFO Command: Can you tell me yes or no ?
+2026-10-01 19:32:56,014 INFO Command: Open Calculator
+2026-10-01 19:33:03,035 INFO Command: Open Notepad
+2026-10-01 19:33:40,384 INFO Command: play song supreme
+2026-10-01 19:34:41,434 INFO Command: now AI is chnage for SI?
