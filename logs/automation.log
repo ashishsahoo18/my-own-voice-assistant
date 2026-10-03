@@ -503,3 +503,5 @@ AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
 2026-10-01 19:33:03,035 INFO Command: Open Notepad
 2026-10-01 19:33:40,384 INFO Command: play song supreme
 2026-10-01 19:34:41,434 INFO Command: now AI is chnage for SI?
+2026-10-02 21:43:30,919 INFO Command: any movie play
+2026-10-02 21:45:56,227 INFO Command: play movie in youtube
