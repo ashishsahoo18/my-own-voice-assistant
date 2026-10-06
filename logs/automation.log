@@ -506,3 +506,13 @@ AttributeError: 'WhatsAppCommands' object has no attribute 'open_whatsapp'
 2026-10-02 21:43:30,919 INFO Command: any movie play
 2026-10-02 21:45:56,227 INFO Command: play movie in youtube
 2026-10-03 20:32:56,318 INFO Command: Open YouTube
+2026-10-05 19:59:08,909 INFO Command: hello Ashish
+2026-10-05 19:59:46,951 INFO Command: open YouTube and play in song
+2026-10-05 19:59:58,115 INFO Command: open YouTube and play any song
+2026-10-05 20:00:07,428 INFO Command: play Odia song
+2026-10-05 20:01:14,913 INFO Command: open Google
+2026-10-05 20:01:29,860 INFO Command: search Microsoft company
+2026-10-05 20:01:44,811 INFO Command: nabhi
+2026-10-05 20:02:08,994 INFO Command: who is the CEO of Google
+2026-10-05 20:02:24,554 INFO Command: who is the CEO
+2026-10-05 20:03:03,462 INFO Command: who is the CEO of flexibility
