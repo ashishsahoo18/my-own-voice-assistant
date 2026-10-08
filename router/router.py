@@ -180,14 +180,30 @@ class IntentRouter:
             max_retries=1,
         )
 
-    def execute_route(self, route_res: RouteResult) -> str:
-        """Execute the tool resolved by the route."""
+    def execute_route(self, route_res: RouteResult, confirmation_token: Optional[str] = None) -> str:
+        """Execute the tool resolved by the route, enforced by the PolicyEngine."""
         if not route_res.matched or not route_res.tool_name:
             return route_res.direct_response or "Could not determine action."
 
         tool = self.registry.get_tool(route_res.tool_name)
         if not tool or not tool.handler:
             return f"Tool '{route_res.tool_name}' is not available."
+
+        # Central Policy Gate
+        from security.policy_engine import get_policy_engine
+        policy = get_policy_engine()
+        decision = policy.evaluate(
+            tool_name=route_res.tool_name,
+            risk_level=tool.risk_level.value,
+            arguments=route_res.arguments,
+            confirmation_token=confirmation_token,
+        )
+
+        if decision.is_denied:
+            return f"Policy Denied: {decision.reason}"
+
+        if decision.is_need_confirm:
+            return f"CONFIRMATION_REQUIRED:{decision.token}:{decision.summary}"
 
         try:
             result = tool.handler(**route_res.arguments)

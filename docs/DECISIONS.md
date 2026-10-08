@@ -37,3 +37,24 @@
   - Command handling is decoupled and extensible without editing core code.
   - Immediate rollback capability preserved via `router.mode: legacy`.
   - 100% backward compatibility maintained across all regression tests.
+
+---
+
+### ADR 0003: Central Policy Gate, Action-Bound Confirmation Tokens, and Native Path Sandbox (Phase 3)
+- **Status**: Accepted & Implemented
+- **Date**: October 8, 2026
+- **Context**:
+  OLIVER 2.0 has the ability to execute Windows system commands, delete files, and dispatch communications. Without a centralized policy gate, untrusted input or hallucinated model tool calls could trigger destructive operations. Confirmation previously relied on raw string prefixes (`"CONFIRMATION_REQUIRED:..."`) rather than action-bound tokens, and subprocesses used `shell=True` and `eval()`.
+- **Decision**:
+  1. **Central Policy Gate**: Introduced `security.policy_engine.PolicyEngine`. All tool invocations—whether routed through OLIVER intent matching, legacy command dispatch, direct skill invocation, or external plugins—must evaluate against `PolicyEngine.evaluate()`.
+  2. **4-Tier Risk Policy**: Enforced explicit tiers: Risk 0 (SAFE), Risk 1 (LOW), Risk 2 (SENSITIVE), and Risk 3 (DANGEROUS).
+  3. **Action-Bound Confirmation Tokens**: Built `security.confirmation.ConfirmationManager` using single-use UUID tokens with exact-effect preview summaries, anti-replay tracking (`_consumed_tokens`), strict yes/no confirmation grammars, and 30-second TTL expiration.
+  4. **Path Sandboxing & Safe Deletion**: Implemented `security.sandbox.PathSandbox` enforcing allowlisted directory roots, blocking traversal (`..`) and sensitive Windows system directories (`C:\Windows`, `.ssh`). Replaced permanent deletion with native Windows Recycle Bin transfers via `SHFileOperationW`.
+  5. **Emergency Kill Switch & Rate Limiter**: Added `security.kill_switch.KillSwitch` for immediate action halting and token invalidation, plus sliding-window rate limiting for sensitive operations.
+  6. **Zero Shell=True & Zero Eval()**: Eradicated all `shell=True` and raw `eval()` calls project-wide, replacing them with AST-based arithmetic parsers and explicit argument lists.
+- **Consequences**:
+  - The LLM can never make permission decisions or execute destructive commands independently.
+  - Replay attacks on confirmation tokens are prevented.
+  - Backward compatibility with legacy confirmations (`CONFIRMATION_REQUIRED:...`) is fully maintained.
+  - Complete test suite passes (87/87 tests).
+

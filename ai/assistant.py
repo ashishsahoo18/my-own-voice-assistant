@@ -159,6 +159,9 @@ class AshishAssistant:
 
     def execute_confirmed_command(self, command_payload: str) -> str:
         """Execute a WhatsApp, Email, or dangerous command after user confirmation."""
+        from security.policy_engine import get_policy_engine
+
+        policy_engine = get_policy_engine()
         text = command_payload.strip()
 
         if text.startswith("CONFIRMATION_REQUIRED:WHATSAPP:") or text.startswith("WHATSAPP:"):
@@ -166,6 +169,14 @@ class AshishAssistant:
             parts = payload.split("|")
             if len(parts) >= 3:
                 recipient, phone, message = parts[0], parts[1], parts[2]
+                decision = policy_engine.evaluate(
+                    tool_name="communication.whatsapp_send",
+                    risk_level=2,
+                    arguments={"phone": phone, "message": message, "recipient": recipient},
+                    user_confirmed=True,
+                )
+                if decision.is_denied:
+                    return f"Policy denied: {decision.reason}"
                 return self.whatsapp.send_message(phone, message)
 
         if text.startswith("CONFIRMATION_REQUIRED:EMAIL:") or text.startswith("EMAIL:"):
@@ -173,14 +184,31 @@ class AshishAssistant:
             parts = payload.split("|")
             if len(parts) >= 4:
                 recipient, email, subject, message = parts[0], parts[1], parts[2], parts[3]
+                decision = policy_engine.evaluate(
+                    tool_name="communication.email_send",
+                    risk_level=2,
+                    arguments={"email": email, "subject": subject, "message": message, "recipient": recipient},
+                    user_confirmed=True,
+                )
+                if decision.is_denied:
+                    return f"Policy denied: {decision.reason}"
                 return self.email_service.send_email(email, subject, message)
 
         lowered = text.lower()
         if "shutdown" in lowered:
+            decision = policy_engine.evaluate(tool_name="windows.shutdown", risk_level=3, user_confirmed=True)
+            if decision.is_denied:
+                return f"Policy denied: {decision.reason}"
             return self.system.shutdown()
         if "restart" in lowered:
+            decision = policy_engine.evaluate(tool_name="windows.restart", risk_level=3, user_confirmed=True)
+            if decision.is_denied:
+                return f"Policy denied: {decision.reason}"
             return self.system.restart()
         if "delete file" in lowered:
+            decision = policy_engine.evaluate(tool_name="files.delete_file", risk_level=3, user_confirmed=True)
+            if decision.is_denied:
+                return f"Policy denied: {decision.reason}"
             return self.system.create_file("deleted_placeholder.txt")
 
         return "Command executed."

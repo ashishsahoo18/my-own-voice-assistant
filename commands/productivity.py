@@ -14,10 +14,11 @@ class ProductivityCommands:
         self._countdown_running = False
 
     def calculate(self, expression: str) -> str:
-        try:
-            return str(eval(expression, {"__builtins__": {}}, {}))
-        except Exception as exc:
-            return f"Calculation error: {exc}"
+        from commands.calculator import Calculator
+        res = Calculator().evaluate(expression)
+        if res.startswith("Error:"):
+            return f"Calculation error: {res[6:].strip()}"
+        return res
 
     def start_stopwatch(self) -> str:
         self._stopwatch_started_at = time.time()

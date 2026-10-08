@@ -5,9 +5,9 @@ from __future__ import annotations
 import importlib.util
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
-from skills.base import BaseSkill, SkillManifest, ToolSpec
+from skills.base import BaseSkill, SkillManifest, ToolResult, ToolSpec
 
 logger = logging.getLogger("oliver.skills.registry")
 
@@ -129,6 +129,81 @@ class SkillRegistry:
             elif not skill:
                 active_tools.append(tool)
         return active_tools
+
+    def execute_tool(
+        self,
+        name: str,
+        arguments: Optional[dict[str, Any]] = None,
+        token: Optional[str] = None,
+    ) -> ToolResult:
+        """Execute a tool through the central PolicyEngine gate.
+
+        Direct tool invocation and drop-in user skills MUST pass through this method.
+        """
+        from security.policy_engine import get_policy_engine
+
+        tool = self.get_tool(name)
+        if not tool:
+            return ToolResult(
+                status="FAILED",
+                message=f"Tool '{name}' is not registered.",
+                error="ToolNotFound",
+            )
+
+        # Check owning skill enablement
+        skill_prefix = tool.name.split(".")[0].lower()
+        skill = self.get_skill(skill_prefix)
+        if skill and not skill.enabled:
+            return ToolResult(
+                status="DENIED",
+                message=f"Skill '{skill_prefix}' is disabled.",
+                error="SkillDisabled",
+            )
+
+        policy_engine = get_policy_engine()
+        decision = policy_engine.evaluate(
+            tool_name=tool.name,
+            risk_level=int(tool.risk_level),
+            arguments=arguments or {},
+            confirmation_token=token,
+        )
+
+        if decision.is_denied:
+            return ToolResult(
+                status="DENIED",
+                message=f"Policy denied execution of '{name}': {decision.reason}",
+                error="PolicyDenied",
+            )
+
+        if decision.is_need_confirm:
+            return ToolResult(
+                status="NEED_CONFIRM",
+                message=decision.summary,
+                data={
+                    "token": decision.token,
+                    "risk_level": int(decision.risk_level),
+                    "summary": decision.summary,
+                    "details": decision.details,
+                },
+            )
+
+        # ALLOWED: Invoke tool handler
+        try:
+            handler_args = arguments or {}
+            raw_res = tool.handler(**handler_args) if tool.handler else None
+            if isinstance(raw_res, ToolResult):
+                return raw_res
+            return ToolResult(
+                status="SUCCESS",
+                message=str(raw_res),
+                data={"raw_result": raw_res},
+            )
+        except Exception as exc:
+            return ToolResult(
+                status="FAILED",
+                message=f"Error executing tool '{name}': {exc}",
+                error=str(exc),
+            )
 
     def discover_user_skills(self, user_skills_dir: Path) -> int:
         """Discover and load drop-in user skills from external folder."""
