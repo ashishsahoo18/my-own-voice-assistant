@@ -18,3 +18,22 @@
   - The project is now protected against accidental data loss.
   - Runtime logs and databases will no longer pollute git commits.
   - All existing features and tests remain 100% operational.
+
+## ADR 0002: Phase 2 Skill/Tool Registry & Router Architecture
+
+- **Status**: Accepted
+- **Date**: October 8, 2026
+- **Context**:
+  The previous command architecture used monolithic keyword matching scattered between `AshishAssistant` and `CommandRouter`. We needed a decoupled plugin/skill registry with explicit tool contracts, deterministic-first matching, schema-constrained LLM fallback, and immediate rollback via feature flag.
+- **Decision**:
+  1. **Contract Definition**: Created `skills.base` declaring `BaseSkill`, `SkillManifest`, `ToolSpec`, `ToolResult`, and `ToolRiskLevel` (Levels 0-3).
+  2. **Central Registry**: Created `skills.registry.SkillRegistry` supporting dynamic discovery, manifest validation, health checks, enabling/disabling, and broken-skill isolation.
+  3. **Builtin Adapters**: Wrapped all pre-existing command logic into 9 builtin skills (`windows`, `browser`, `youtube`, `files`, `communication`, `contacts`, `info`, `productivity`, `ai`) without modifying underlying command implementations.
+  4. **Productivity Hardening**: Replaced dangerous `eval()` arithmetic evaluation in `ProductivitySkill` with an AST-based safe math evaluator.
+  5. **LLM Provider**: Formalized `llm.provider.LLMProvider` and `llm.ollama_provider.OllamaProvider` connecting to local `llama3.2:latest`, supporting structured JSON output via Pydantic validation.
+  6. **Dual Router Modes**: Added feature flag `router.mode: legacy | oliver`. In `legacy` mode, original command dispatching executes unchanged; in `oliver` mode, deterministic rule routing executes first, falling back to schema-constrained LLM intent classification.
+  7. **Drop-in User Skills**: Supported loading external user skills from a `user_skills/` directory.
+- **Consequences**:
+  - Command handling is decoupled and extensible without editing core code.
+  - Immediate rollback capability preserved via `router.mode: legacy`.
+  - 100% backward compatibility maintained across all regression tests.

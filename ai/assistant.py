@@ -55,6 +55,10 @@ class AshishAssistant:
         self.ai_service = AIService()
         self.router = CommandRouter()
 
+        from core.config import get_config
+        self.config = get_config()
+        self.oliver_router = None
+
         self.used_google_search = False
         self.last_folder_path: Path | None = None
         self.last_file_path: Path | None = None
@@ -119,6 +123,18 @@ class AshishAssistant:
             return "Please say or type a command so I can help."
 
         lowered = text.lower()
+
+        # OLIVER Mode Routing Branch
+        if getattr(self, "config", None) and getattr(self.config, "router_mode", "legacy") == "oliver":
+            if self.oliver_router is None:
+                from router.router import IntentRouter
+                self.oliver_router = IntentRouter()
+            route_res = self.oliver_router.route(text)
+            if route_res.matched:
+                if route_res.requires_confirmation:
+                    return f"CONFIRMATION_REQUIRED:{route_res.tool_name}:{text}"
+                return self.oliver_router.execute_route(route_res)
+
         intent = self.determine_intent(text)
         self.intent_type = intent
 
