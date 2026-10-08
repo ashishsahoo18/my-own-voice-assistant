@@ -135,12 +135,14 @@ class SkillRegistry:
         name: str,
         arguments: Optional[dict[str, Any]] = None,
         token: Optional[str] = None,
+        user_confirmed: bool = False,
     ) -> ToolResult:
-        """Execute a tool through the central PolicyEngine gate.
+        """Execute a tool through the central execution and verification pipeline.
 
         Direct tool invocation and drop-in user skills MUST pass through this method.
         """
-        from security.policy_engine import get_policy_engine
+        from execution.engine import get_execution_engine
+        from execution.request import TaskRequest
 
         tool = self.get_tool(name)
         if not tool:
@@ -160,50 +162,17 @@ class SkillRegistry:
                 error="SkillDisabled",
             )
 
-        policy_engine = get_policy_engine()
-        decision = policy_engine.evaluate(
+        request = TaskRequest(
             tool_name=tool.name,
-            risk_level=int(tool.risk_level),
             arguments=arguments or {},
+            risk_level=int(tool.risk_level),
             confirmation_token=token,
+            user_confirmed=user_confirmed,
+            timeout_s=tool.timeout_s,
         )
 
-        if decision.is_denied:
-            return ToolResult(
-                status="DENIED",
-                message=f"Policy denied execution of '{name}': {decision.reason}",
-                error="PolicyDenied",
-            )
-
-        if decision.is_need_confirm:
-            return ToolResult(
-                status="NEED_CONFIRM",
-                message=decision.summary,
-                data={
-                    "token": decision.token,
-                    "risk_level": int(decision.risk_level),
-                    "summary": decision.summary,
-                    "details": decision.details,
-                },
-            )
-
-        # ALLOWED: Invoke tool handler
-        try:
-            handler_args = arguments or {}
-            raw_res = tool.handler(**handler_args) if tool.handler else None
-            if isinstance(raw_res, ToolResult):
-                return raw_res
-            return ToolResult(
-                status="SUCCESS",
-                message=str(raw_res),
-                data={"raw_result": raw_res},
-            )
-        except Exception as exc:
-            return ToolResult(
-                status="FAILED",
-                message=f"Error executing tool '{name}': {exc}",
-                error=str(exc),
-            )
+        engine = get_execution_engine()
+        return engine.execute(request, registry=self)
 
     def discover_user_skills(self, user_skills_dir: Path) -> int:
         """Discover and load drop-in user skills from external folder."""

@@ -58,3 +58,24 @@
   - Backward compatibility with legacy confirmations (`CONFIRMATION_REQUIRED:...`) is fully maintained.
   - Complete test suite passes (87/87 tests).
 
+---
+
+### ADR 0004: Central Execution Funnel and Post-Execution Verification Pipeline (Phase 4)
+- **Status**: Accepted & Implemented
+- **Date**: October 8, 2026
+- **Context**:
+  In earlier phases, tools could report completion without concrete observable verification (e.g. a file operation claiming success even if the file failed to write, or a communication tool asserting delivery without confirmation). To ensure reliability, OLIVER 2.0 requires an authoritative execution funnel where every action follows:
+  `TaskRequest -> Validate -> PolicyGate -> Confirm -> Execute -> Verify -> Record -> Report`.
+- **Decision**:
+  1. **Central Execution Engine**: Implemented `execution.engine.ExecutionEngine`. Every action from OLIVER mode, legacy mode, and direct tool invocations passes through this single funnel.
+  2. **Structured TaskRequest**: Created typed `TaskRequest` with correlation IDs, timeout controls, integrity validation, and confirmation state.
+  3. **Observable Post-Execution Verifiers**: Created `FileVerifier` (filesystem existence, type, size check, deletion absence), `ProcessVerifier` (active process inspection via `psutil`), `CommunicationVerifier` (honest reporting: `UNVERIFIED` for desktop automation without delivery receipts; never claims false delivery), and `GenericVerifier`.
+  4. **Strict Typed States**: Standardized on `VERIFIED`, `UNVERIFIED`, `FAILED`, `DENIED`, `CANCELLED`, and `TIMEOUT`. `UNVERIFIED` is never converted to success, and LLMs are forbidden from inventing verification evidence.
+  5. **Graceful Fallback & Bounded Retries**: Implemented deterministic fallback handlers for safe operations (Risk <= 1), bounded to 1 retry.
+  6. **Lifecycle Audit Trail**: Recorded execution lifecycle events with correlation IDs: `TASK_REQUESTED`, `TASK_VALIDATED`, `POLICY_CHECKED`, `TASK_EXECUTED`, `VERIFICATION_STARTED`, `VERIFICATION_COMPLETED`, and `TASK_COMPLETED`.
+- **Consequences**:
+  - Direct execution bypasses are eliminated.
+  - Verification is grounded strictly in operating system reality.
+  - Complete test suite passes (100/100 tests).
+
+

@@ -158,10 +158,11 @@ class AshishAssistant:
         return self.ai_service.ask(text)
 
     def execute_confirmed_command(self, command_payload: str) -> str:
-        """Execute a WhatsApp, Email, or dangerous command after user confirmation."""
-        from security.policy_engine import get_policy_engine
+        """Execute a WhatsApp, Email, or dangerous command through the central ExecutionEngine."""
+        from execution.engine import get_execution_engine
+        from execution.request import TaskRequest
 
-        policy_engine = get_policy_engine()
+        engine = get_execution_engine()
         text = command_payload.strip()
 
         if text.startswith("CONFIRMATION_REQUIRED:WHATSAPP:") or text.startswith("WHATSAPP:"):
@@ -169,47 +170,55 @@ class AshishAssistant:
             parts = payload.split("|")
             if len(parts) >= 3:
                 recipient, phone, message = parts[0], parts[1], parts[2]
-                decision = policy_engine.evaluate(
-                    tool_name="communication.whatsapp_send",
-                    risk_level=2,
-                    arguments={"phone": phone, "message": message, "recipient": recipient},
-                    user_confirmed=True,
+                res = engine.execute(
+                    TaskRequest(
+                        tool_name="communication.whatsapp_send",
+                        arguments={"phone": phone, "message": message, "recipient": recipient},
+                        user_confirmed=True,
+                    )
                 )
-                if decision.is_denied:
-                    return f"Policy denied: {decision.reason}"
-                return self.whatsapp.send_message(phone, message)
+                if res.status in ("DENIED", "CANCELLED"):
+                    return f"Policy denied: {res.message}"
+                return res.message
 
         if text.startswith("CONFIRMATION_REQUIRED:EMAIL:") or text.startswith("EMAIL:"):
             payload = text.split(":", 2)[-1]
             parts = payload.split("|")
             if len(parts) >= 4:
                 recipient, email, subject, message = parts[0], parts[1], parts[2], parts[3]
-                decision = policy_engine.evaluate(
-                    tool_name="communication.email_send",
-                    risk_level=2,
-                    arguments={"email": email, "subject": subject, "message": message, "recipient": recipient},
-                    user_confirmed=True,
+                res = engine.execute(
+                    TaskRequest(
+                        tool_name="communication.email_send",
+                        arguments={"email": email, "subject": subject, "message": message, "recipient": recipient},
+                        user_confirmed=True,
+                    )
                 )
-                if decision.is_denied:
-                    return f"Policy denied: {decision.reason}"
-                return self.email_service.send_email(email, subject, message)
+                if res.status in ("DENIED", "CANCELLED"):
+                    return f"Policy denied: {res.message}"
+                return res.message
 
         lowered = text.lower()
         if "shutdown" in lowered:
-            decision = policy_engine.evaluate(tool_name="windows.shutdown", risk_level=3, user_confirmed=True)
-            if decision.is_denied:
-                return f"Policy denied: {decision.reason}"
-            return self.system.shutdown()
+            res = engine.execute(TaskRequest(tool_name="windows.shutdown", user_confirmed=True))
+            if res.status in ("DENIED", "CANCELLED"):
+                return f"Policy denied: {res.message}"
+            return res.message
         if "restart" in lowered:
-            decision = policy_engine.evaluate(tool_name="windows.restart", risk_level=3, user_confirmed=True)
-            if decision.is_denied:
-                return f"Policy denied: {decision.reason}"
-            return self.system.restart()
+            res = engine.execute(TaskRequest(tool_name="windows.restart", user_confirmed=True))
+            if res.status in ("DENIED", "CANCELLED"):
+                return f"Policy denied: {res.message}"
+            return res.message
         if "delete file" in lowered:
-            decision = policy_engine.evaluate(tool_name="files.delete_file", risk_level=3, user_confirmed=True)
-            if decision.is_denied:
-                return f"Policy denied: {decision.reason}"
-            return self.system.create_file("deleted_placeholder.txt")
+            res = engine.execute(
+                TaskRequest(
+                    tool_name="files.delete_file",
+                    arguments={"path": "deleted_placeholder.txt"},
+                    user_confirmed=True,
+                )
+            )
+            if res.status in ("DENIED", "CANCELLED"):
+                return f"Policy denied: {res.message}"
+            return res.message
 
         return "Command executed."
 

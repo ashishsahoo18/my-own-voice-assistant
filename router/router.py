@@ -180,36 +180,35 @@ class IntentRouter:
             max_retries=1,
         )
 
-    def execute_route(self, route_res: RouteResult, confirmation_token: Optional[str] = None) -> str:
-        """Execute the tool resolved by the route, enforced by the PolicyEngine."""
+    def execute_route(
+        self,
+        route_res: RouteResult,
+        confirmation_token: Optional[str] = None,
+        user_confirmed: bool = False,
+    ) -> str:
+        """Execute the tool resolved by the route through the central ExecutionEngine."""
         if not route_res.matched or not route_res.tool_name:
             return route_res.direct_response or "Could not determine action."
 
-        tool = self.registry.get_tool(route_res.tool_name)
-        if not tool or not tool.handler:
-            return f"Tool '{route_res.tool_name}' is not available."
+        from execution.engine import get_execution_engine
+        from execution.request import TaskRequest
 
-        # Central Policy Gate
-        from security.policy_engine import get_policy_engine
-        policy = get_policy_engine()
-        decision = policy.evaluate(
+        request = TaskRequest(
             tool_name=route_res.tool_name,
-            risk_level=tool.risk_level.value,
             arguments=route_res.arguments,
             confirmation_token=confirmation_token,
+            user_confirmed=user_confirmed,
         )
 
-        if decision.is_denied:
-            return f"Policy Denied: {decision.reason}"
+        engine = get_execution_engine()
+        result = engine.execute(request)
 
-        if decision.is_need_confirm:
-            return f"CONFIRMATION_REQUIRED:{decision.token}:{decision.summary}"
+        if result.status == "NEED_CONFIRM":
+            token = result.data.get("token") or "pending"
+            summary = result.message
+            return f"CONFIRMATION_REQUIRED:{token}:{summary}"
 
-        try:
-            result = tool.handler(**route_res.arguments)
-            if isinstance(result, ToolResult):
-                return result.message
-            return str(result)
-        except Exception as exc:
-            logger.exception("Error executing tool %s: %s", route_res.tool_name, exc)
-            return f"Execution error: {exc}"
+        if result.status == "DENIED":
+            return f"Policy Denied: {result.message}"
+
+        return result.message

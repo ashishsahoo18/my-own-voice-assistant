@@ -111,9 +111,19 @@ class FilesSkill(BaseSkill):
         return ToolResult(status="SUCCESS", message=res)
 
     def delete_file(self, path: str) -> ToolResult:
-        res = self.files.delete_file(path)
-        return ToolResult(status="SUCCESS", message=res)
+        from security.sandbox import PathSandbox
+
+        sandbox = PathSandbox()
+        ok, msg = sandbox.safe_delete(path)
+        if ok:
+            return ToolResult(status="SUCCESS", message=msg, data={"path": path})
+        return ToolResult(status="FAILED", message=msg, error=msg, data={"path": path})
 
     def delete_folder(self, path: str) -> ToolResult:
-        res = self.files.delete_folder(path)
-        return ToolResult(status="SUCCESS", message=res)
+        from security.sandbox import PathSandbox
+
+        sandbox = PathSandbox()
+        ok, msg = sandbox.safe_delete(path)
+        if ok:
+            return ToolResult(status="SUCCESS", message=msg, data={"path": path})
+        return ToolResult(status="FAILED", message=msg, error=msg, data={"path": path})
