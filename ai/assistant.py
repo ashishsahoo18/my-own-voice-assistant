@@ -237,6 +237,12 @@ class AshishAssistant:
         return None
 
     def _handle_commands(self, text: str, lowered: str) -> str | None:
+        if lowered.startswith("run task ") or lowered.startswith("plan and execute "):
+            goal = re.sub(r"^(?:run\s+task|plan\s+and\s+execute)\s+", "", text, flags=re.IGNORECASE).strip()
+            from agent.executor import get_agent_task_loop
+            report = get_agent_task_loop().run(goal=goal)
+            return report.summary
+
         time_date_res = self._handle_time_date_commands(text, lowered)
         if time_date_res:
             return time_date_res

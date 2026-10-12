@@ -130,6 +130,8 @@ class SkillRegistry:
                 active_tools.append(tool)
         return active_tools
 
+    get_all_tools = list_tools
+
     def execute_tool(
         self,
         name: str,
@@ -207,3 +209,6 @@ def get_registry() -> SkillRegistry:
     if _default_registry is None:
         _default_registry = SkillRegistry()
     return _default_registry
+
+
+get_skill_registry = get_registry

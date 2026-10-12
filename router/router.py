@@ -109,6 +109,10 @@ class IntentRouter:
             (re.compile(r"^(?:please\s+)?forget\s+(?:about\s+)?(.+)$", re.IGNORECASE), "memory.forget", "target"),
             (re.compile(r"^clear\s+(?:session|conversation)\s+memory$", re.IGNORECASE), "memory.clear_session", "session_id"),
             (re.compile(r"^memory\s+(?:status|settings|info)$", re.IGNORECASE), "memory.status", ""),
+
+            # Agent Multi-Step Tasks
+            (re.compile(r"^(?:run\s+task|plan\s+and\s+execute)\s+(.+)$", re.IGNORECASE), "agent.run_task", "goal"),
+            (re.compile(r"^task\s+status\s+(.+)$", re.IGNORECASE), "agent.task_status", "task_id"),
         ]
 
     def route(self, text: str) -> RouteResult:

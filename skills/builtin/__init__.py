@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from skills.builtin.agent_skill import AgentSkill
 from skills.builtin.ai_skill import AISkill
 from skills.builtin.browser_skill import BrowserSkill
 from skills.builtin.communication_skill import CommunicationSkill
@@ -30,6 +31,7 @@ def register_all_builtin_skills(registry: SkillRegistry | None = None) -> SkillR
         ProductivitySkill,
         AISkill,
         MemorySkill,
+        AgentSkill,
     ]
 
     for cls in builtin_classes:

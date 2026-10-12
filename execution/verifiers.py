@@ -304,6 +304,13 @@ class GenericVerifier(BaseVerifier):
         arguments: dict[str, Any],
         raw_result: Any,
     ) -> VerificationResult:
+        if hasattr(raw_result, "status") and raw_result.status in ("FAILED", "DENIED", "CANCELLED", "TIMEOUT"):
+            return VerificationResult(
+                status="FAILED" if raw_result.status == "FAILED" else raw_result.status,
+                evidence={"output_received": False, "tool_status": raw_result.status},
+                message=raw_result.message if hasattr(raw_result, "message") else str(raw_result),
+            )
+
         msg = raw_result.message if hasattr(raw_result, "message") else str(raw_result)
         if raw_result is not None and str(msg).strip():
             return VerificationResult(

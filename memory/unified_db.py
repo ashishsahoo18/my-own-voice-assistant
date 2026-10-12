@@ -110,6 +110,38 @@ CREATE INDEX IF NOT EXISTS idx_working_memory_session ON working_memory(session_
 CREATE INDEX IF NOT EXISTS idx_reminders_remind_at ON reminders(remind_at, completed);
 """
 
+MIGRATION_V2_SQL = """
+-- Migration V2: Agent Tasks and Execution Persistence
+CREATE TABLE IF NOT EXISTS agent_tasks (
+    task_id TEXT PRIMARY KEY,
+    goal TEXT NOT NULL,
+    status TEXT NOT NULL,
+    plan_json TEXT NOT NULL,
+    current_step INTEGER NOT NULL DEFAULT 0,
+    replan_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS agent_task_steps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    task_id TEXT NOT NULL,
+    step_number INTEGER NOT NULL,
+    tool_name TEXT NOT NULL,
+    arguments TEXT NOT NULL,
+    status TEXT NOT NULL,
+    verification_status TEXT NOT NULL,
+    verification_evidence TEXT,
+    message TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(task_id) REFERENCES agent_tasks(task_id) ON DELETE CASCADE,
+    UNIQUE(task_id, step_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status, updated_at);
+CREATE INDEX IF NOT EXISTS idx_agent_steps_task ON agent_task_steps(task_id, step_number);
+"""
+
 
 class UnifiedDatabase:
     """Thread-safe SQLite connection and transaction manager in WAL mode."""
@@ -202,6 +234,16 @@ class UnifiedDatabase:
                     conn.execute(
                         "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
                         (1, "v1_initial_unified_schema", now),
+                    )
+
+            if curr_version < 2:
+                logger.info("Applying schema migration V2 to %s", self.db_path)
+                with conn:
+                    conn.executescript(MIGRATION_V2_SQL)
+                    now = datetime.now().isoformat()
+                    conn.execute(
+                        "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+                        (2, "v2_agent_task_persistence", now),
                     )
 
     def get_journal_mode(self) -> str:

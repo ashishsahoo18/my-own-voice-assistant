@@ -93,6 +93,18 @@ class SecuritySettings(BaseModel):
     confirmation_timeout_seconds: float = Field(default=30.0)
 
 
+class AgentSettings(BaseModel):
+    """Resource limits and safeguards for multi-step agent planner and task loop."""
+
+    max_plan_steps: int = Field(default=6, ge=1, le=6, description="Hard bound on maximum steps per plan")
+    max_replans: int = Field(default=1, ge=0, le=2, description="Maximum allowed replanning attempts per task")
+    max_tool_calls: int = Field(default=6, ge=1, le=10, description="Hard limit on total tool invocations")
+    task_timeout_seconds: float = Field(default=60.0, ge=5.0, le=300.0)
+    step_timeout_seconds: float = Field(default=20.0, ge=1.0, le=60.0)
+    require_step_verification: bool = Field(default=True)
+    loop_detection_window: int = Field(default=3, ge=2, le=5)
+
+
 class StorageSettings(BaseModel):
     """Storage, database, and logging directories."""
 
@@ -137,6 +149,7 @@ class OliverConfig(BaseModel):
     llm: LLMSettings = Field(default_factory=LLMSettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
+    agent: AgentSettings = Field(default_factory=AgentSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
 
     def is_path_allowed(self, target: Path | str) -> bool:

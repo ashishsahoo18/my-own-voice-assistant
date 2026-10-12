@@ -105,5 +105,28 @@
   - Full concurrency resilience under WAL mode tested and verified.
   - 121/121 regression tests passing.
 
+---
+
+### ADR 0006: Multi-Step Agentic Task Loop, Bounded Planner, and Task Persistence (Phase 6)
+- **Status**: Accepted & Implemented
+- **Date**: October 12, 2026
+- **Context**:
+  Composite user tasks (e.g. creating a folder and saving a file inside it, or calculating figures and recording reminders) require multi-step planning and autonomous orchestration. Without strict boundaries, agents risk runaway execution loops, unverified actions, security policy bypasses, repeated destructive operations, or hallucinated success reports.
+- **Decision**:
+  1. **Bounded Planning**: Plans strictly bounded to a maximum of 6 steps (`max_plan_steps = 6`). Every plan is validated by `PlanValidator` against schema, sequential numbering, registered tool availability, and security bypass prevention prior to execution.
+  2. **Mandatory Central Security Gate**: No agent step executes tools directly. Every step is wrapped in `TaskRequest` and dispatched through `ExecutionEngine.execute()`, enforcing `PolicyEngine`, confirmation checks, sandboxing, and verifiers.
+  3. **Step-by-Step Observable Verification**: Each step's outcome is checked against concrete operating system verifiers (`VERIFIED`, `UNVERIFIED`, `FAILED`). A step failure or unverified result immediately halts sequential execution.
+  4. **Action-Bound Confirmation**: Actions with Risk >= 2 (Sensitive/Dangerous) require explicit confirmation bound to the exact tool and parameters. Unconfirmed tasks pause cleanly in `WAITING_CONFIRMATION` without executing unapproved steps.
+  5. **Bounded Recovery & Replanning**: Recovery is bounded to at most 1 replan attempt (`max_replans = 1`). Infinite replanning loops are impossible. If recovery fails, the task terminates in `REPLAN_EXHAUSTED`.
+  6. **Loop & Oscillation Detection**: Implemented `LoopDetector` tracking sliding action history. Immediately halts duplicate identical calls, oscillatory sequences (A-B-A-B), and repeated destructive operations.
+  7. **Transactional Task Persistence & Safe Resumption**: Managed via `TaskStore` backed by `agent_tasks` and `agent_task_steps` tables in the unified SQLite database. Interrupted tasks can be inspected and resumed without repeating already-verified completed steps.
+  8. **Honest Reporting**: `TaskReport` summaries are constructed strictly from real `ToolResult` statuses and observable verification evidence. LLMs are prohibited from asserting task success without verifier backing.
+  9. **Memory Read-Only Context Integration**: Planner reads context from `HybridMemoryEngine` without persisting entire multi-step tasks as permanent facts.
+- **Consequences**:
+  - Full multi-step autonomy with deterministic safety guards.
+  - Resilient cancellation and emergency kill switch support.
+  - Complete test suite passes: 134/134 tests passing.
+
+
 
 
