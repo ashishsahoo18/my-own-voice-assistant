@@ -78,4 +78,32 @@
   - Verification is grounded strictly in operating system reality.
   - Complete test suite passes (100/100 tests).
 
+---
+
+### ADR 0005: Unified Database & Hybrid Memory Engine (Phase 5)
+- **Status**: Accepted & Implemented
+- **Date**: October 12, 2026
+- **Context**:
+  Legacy OLIVER/AYRA stored data haphazardly across disjoint SQLite databases (`database/ayra_chat.db`, `database/ayra_memory.db`, `database/memory.db`) with varying schemas and lacking foreign keys, WAL concurrency mode, schema version tracking, and deterministic migration deduplication. Furthermore, conversation state, short-term references, and long-term user facts lacked structured separation and strict privacy boundary enforcement.
+- **Decision**:
+  1. **Unified SQLite Database (`database/oliver.db`)**: Configured with `PRAGMA journal_mode = WAL;`, `foreign_keys = ON;`, `synchronous = NORMAL;`, and `busy_timeout = 5000;`. Schema versioning tracked in `schema_migrations`.
+  2. **Additive, Idempotent Legacy Migration**: Implemented `LegacyDataMigrator` which creates timestamped SHA-256 verified backups before migrating. Legacy databases are strictly read-only and never deleted or mutated. Duplicate prevention is enforced deterministically by `UNIQUE(source_db, source_table, source_id)` in `data_migration_log`.
+  3. **Three-Tier Hybrid Memory Architecture**:
+     - *Working Memory*: Active session buffer, recent candidate entity tracking, and pronoun/ordinal reference resolution ("it", "that one", "the second one", "last one").
+     - *Episodic Memory*: Multi-session conversation history with token estimates and structured prompt context formatting.
+     - *Semantic Memory*: Long-term facts and user preferences with importance scoring (0.0 to 1.0) and keyword search with access-frequency ranking boost.
+  4. **Strict Privacy Policy Gate**: Storage requests deterministically pass through `SensitiveDataFilter`. Passwords, API keys, bearer tokens, OTPs, PINs, and credit card numbers are rejected prior to persistence. The LLM is never permitted to make privacy decisions.
+  5. **Explicit User Memory Controls**: First-class commands and skill tools:
+     - `what do you remember`
+     - `remember that <fact>`
+     - `forget <target>` / `forget this memory`
+     - `clear session memory`
+     - `memory status`
+- **Consequences**:
+  - Legacy user history (1 session, 8 messages) safely imported and verified.
+  - Zero data loss, zero mutation to original legacy files.
+  - Full concurrency resilience under WAL mode tested and verified.
+  - 121/121 regression tests passing.
+
+
 

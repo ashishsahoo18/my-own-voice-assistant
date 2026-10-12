@@ -8,6 +8,7 @@ from skills.builtin.communication_skill import CommunicationSkill
 from skills.builtin.contacts_skill import ContactsSkill
 from skills.builtin.files_skill import FilesSkill
 from skills.builtin.info_skill import InfoSkill
+from skills.builtin.memory_skill import MemorySkill
 from skills.builtin.productivity_skill import ProductivitySkill
 from skills.builtin.windows_skill import WindowsSkill
 from skills.builtin.youtube_skill import YouTubeSkill
@@ -28,6 +29,7 @@ def register_all_builtin_skills(registry: SkillRegistry | None = None) -> SkillR
         InfoSkill,
         ProductivitySkill,
         AISkill,
+        MemorySkill,
     ]
 
     for cls in builtin_classes:

@@ -362,6 +362,38 @@ class AshishAssistant:
                 return "Note saved successfully."
             return "What note should I save?"
 
+        # Phase 5: Hybrid Memory Engine Controls
+        from memory.manager import get_memory_engine
+        engine = get_memory_engine()
+
+        if re.match(r"^what\s+do\s+you\s+remember(?:\s+about\s+me)?\??$", lowered):
+            return engine.what_do_you_remember()
+
+        if re.match(r"^(?:please\s+)?remember\s+(?:that\s+)?(.+)$", lowered):
+            fact_match = re.match(r"^(?:please\s+)?remember\s+(?:that\s+)?(.+)$", text, re.IGNORECASE)
+            fact = fact_match.group(1).strip() if fact_match else text
+            success, msg = engine.remember(fact)
+            return f"Remembered: {fact}" if success else msg
+
+        if lowered == "forget this memory" or re.match(r"^forget\s+(.+)$", lowered):
+            if lowered == "forget this memory":
+                return engine.forget("")
+            forget_match = re.match(r"^forget\s+(.+)$", text, re.IGNORECASE)
+            target = forget_match.group(1).strip() if forget_match else ""
+            return engine.forget(target)
+
+        if lowered in {"clear session memory", "clear conversation memory"}:
+            return engine.clear_session_memory("default")
+
+        if lowered in {"memory status", "memory settings", "memory info"}:
+            st = engine.status()
+            return (
+                f"OLIVER Memory Engine Active (WAL mode)\n"
+                f"• Long-Term Memories: {st['total_semantic_memories']}\n"
+                f"• Total Sessions: {st['total_sessions']}\n"
+                f"• Total Stored Messages: {st['total_messages']}"
+            )
+
         self._learn_from_text(text)
         return None
 

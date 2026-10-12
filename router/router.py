@@ -101,6 +101,14 @@ class IntentRouter:
             # Info
             (re.compile(r"^weather(?:\s+in\s+(.+))?$", re.IGNORECASE), "info.weather", "location"),
             (re.compile(r"^news(?:\s+(.+))?$", re.IGNORECASE), "info.news", "category"),
+
+            # Memory Controls
+            (re.compile(r"^what\s+do\s+you\s+remember(?:\s+about\s+me)?\??$", re.IGNORECASE), "memory.what_do_you_remember", ""),
+            (re.compile(r"^(?:please\s+)?remember\s+(?:that\s+)?(.+)$", re.IGNORECASE), "memory.remember", "content"),
+            (re.compile(r"^forget\s+this\s+memory$", re.IGNORECASE), "memory.forget", ""),
+            (re.compile(r"^(?:please\s+)?forget\s+(?:about\s+)?(.+)$", re.IGNORECASE), "memory.forget", "target"),
+            (re.compile(r"^clear\s+(?:session|conversation)\s+memory$", re.IGNORECASE), "memory.clear_session", "session_id"),
+            (re.compile(r"^memory\s+(?:status|settings|info)$", re.IGNORECASE), "memory.status", ""),
         ]
 
     def route(self, text: str) -> RouteResult:
