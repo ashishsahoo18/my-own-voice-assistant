@@ -146,6 +146,14 @@ class CommandConsolePanel(ctk.CTkFrame):
         self.status_var = ctk.StringVar(value="READY")
         self.transcript_var = ctk.StringVar(value="Awaiting command...")
 
+        # Register voice state listener for observable HUD state changes
+        try:
+            self.voice_manager.add_state_listener(
+                lambda st, detail: self.after(0, self._set_state, st.value if hasattr(st, "value") else str(st))
+            )
+        except Exception:
+            pass
+
         self._build_ui()
         self._load_history()
 
@@ -465,9 +473,7 @@ class CommandConsolePanel(ctk.CTkFrame):
             self._request_in_flight = False
 
     def _speak_confirmation(self, reply: str) -> None:
-        self._set_state("SPEAKING")
         self.voice_manager.speak(reply)
-        self._set_state("READY")
 
     def _log_console_entry(
         self,
@@ -488,6 +494,9 @@ class CommandConsolePanel(ctk.CTkFrame):
         self._scroll_to_bottom()
 
     def start_voice_input(self) -> None:
+        # Safe barge-in: stop any active speech immediately
+        self.voice_manager.barge_in()
+
         if self._request_in_flight:
             return
 

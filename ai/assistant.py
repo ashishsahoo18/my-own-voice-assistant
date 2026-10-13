@@ -243,6 +243,14 @@ class AshishAssistant:
             report = get_agent_task_loop().run(goal=goal)
             return report.summary
 
+        if lowered.startswith("research ") or lowered.startswith("search web for ") or lowered.startswith("web research "):
+            q = re.sub(r"^(?:research|search\s+web\s+for|web\s+research)\s+", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="research.search", arguments={"query": q}))
+            return res.message
+
         time_date_res = self._handle_time_date_commands(text, lowered)
         if time_date_res:
             return time_date_res

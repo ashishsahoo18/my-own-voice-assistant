@@ -68,6 +68,12 @@ class VoiceSettings(BaseModel):
     auto_send_voice: bool = Field(
         default_factory=lambda: os.getenv("AUTO_SEND_VOICE", "false").strip().lower() in {"1", "true", "yes", "on"}
     )
+    stt_engine: str = Field(
+        default_factory=lambda: os.getenv("STT_ENGINE", "local_first").strip().lower()
+    )
+    fallback_external_allowed: bool = Field(
+        default_factory=lambda: os.getenv("VOICE_FALLBACK_EXTERNAL", "true").strip().lower() in {"1", "true", "yes", "on"}
+    )
 
 
 class SecuritySettings(BaseModel):

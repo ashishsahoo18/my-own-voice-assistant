@@ -113,6 +113,11 @@ class IntentRouter:
             # Agent Multi-Step Tasks
             (re.compile(r"^(?:run\s+task|plan\s+and\s+execute)\s+(.+)$", re.IGNORECASE), "agent.run_task", "goal"),
             (re.compile(r"^task\s+status\s+(.+)$", re.IGNORECASE), "agent.task_status", "task_id"),
+
+            # Research & Grounded Knowledge
+            (re.compile(r"^(?:research|web\s+research|search\s+web\s+for|find\s+information\s+about)\s+(.+)$", re.IGNORECASE), "research.search", "query"),
+            (re.compile(r"^(?:fetch|read)\s+(?:web\s*page\s+|url\s+)?(https?://\S+)$", re.IGNORECASE), "research.fetch_page", "url"),
+            (re.compile(r"^(?:explain\s+topic|overview\s+of)\s+(.+)$", re.IGNORECASE), "research.explain_topic", "topic"),
         ]
 
     def route(self, text: str) -> RouteResult:

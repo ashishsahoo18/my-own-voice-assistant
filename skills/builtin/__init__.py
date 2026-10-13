@@ -11,6 +11,7 @@ from skills.builtin.files_skill import FilesSkill
 from skills.builtin.info_skill import InfoSkill
 from skills.builtin.memory_skill import MemorySkill
 from skills.builtin.productivity_skill import ProductivitySkill
+from skills.builtin.research_skill import ResearchSkill
 from skills.builtin.windows_skill import WindowsSkill
 from skills.builtin.youtube_skill import YouTubeSkill
 from skills.registry import SkillRegistry, get_registry
@@ -32,6 +33,7 @@ def register_all_builtin_skills(registry: SkillRegistry | None = None) -> SkillR
         AISkill,
         MemorySkill,
         AgentSkill,
+        ResearchSkill,
     ]
 
     for cls in builtin_classes:
