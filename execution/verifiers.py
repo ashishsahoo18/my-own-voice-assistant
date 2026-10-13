@@ -325,6 +325,45 @@ class GenericVerifier(BaseVerifier):
         )
 
 
+class BrowserVerifier(BaseVerifier):
+    """Verifies browser navigation, page extraction, and session closures with concrete evidence."""
+
+    def verify(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        raw_result: Any,
+    ) -> VerificationResult:
+        if hasattr(raw_result, "status") and raw_result.status in ("FAILED", "DENIED", "CANCELLED", "TIMEOUT"):
+            return VerificationResult(
+                status=raw_result.status,
+                evidence=raw_result.evidence if hasattr(raw_result, "evidence") else {},
+                message=raw_result.message if hasattr(raw_result, "message") else str(raw_result),
+            )
+
+        if hasattr(raw_result, "evidence") and raw_result.evidence:
+            ev = raw_result.evidence
+            if ev.get("url") or ev.get("driver_active") is False or ev.get("extracted_length", 0) > 0:
+                return VerificationResult(
+                    status="VERIFIED",
+                    evidence=ev,
+                    message=getattr(raw_result, "message", "Browser action completed and verified."),
+                )
+
+        if hasattr(raw_result, "status") and raw_result.status in ("VERIFIED", "SUCCESS"):
+            return VerificationResult(
+                status="VERIFIED",
+                evidence=getattr(raw_result, "evidence", {}),
+                message=getattr(raw_result, "message", "Browser action successful."),
+            )
+
+        return VerificationResult(
+            status="UNVERIFIED",
+            evidence={},
+            message="Browser action returned without verifiable DOM or process evidence.",
+        )
+
+
 class VerifierRegistry:
     """Dispatches tool execution results to the appropriate domain verifier."""
 
@@ -332,10 +371,13 @@ class VerifierRegistry:
         self.file_verifier = FileVerifier()
         self.process_verifier = ProcessVerifier()
         self.communication_verifier = CommunicationVerifier()
+        self.browser_verifier = BrowserVerifier()
         self.generic_verifier = GenericVerifier()
 
     def get_verifier(self, tool_name: str) -> BaseVerifier:
         lowered = tool_name.lower()
+        if lowered.startswith("browser."):
+            return self.browser_verifier
         if lowered.startswith("files.") or "file" in lowered or "folder" in lowered:
             return self.file_verifier
         if "open_app" in lowered or "launch" in lowered or "process" in lowered:

@@ -72,6 +72,11 @@ class IntentRouter:
             (re.compile(r"^sleep(?:\s+(?:the\s+)?(?:computer|pc))?$", re.IGNORECASE), "windows.sleep", ""),
 
             # Browser & Search
+            (re.compile(r"^(?:open|browse\s+to|navigate\s+to)\s+(?:web\s*page\s+|url\s+|page\s+)?(https?://\S+)$", re.IGNORECASE), "browser.open_page", "url"),
+            (re.compile(r"^summarize\s+(?:web\s*page\s+|url\s+|page\s+)(https?://\S+)$", re.IGNORECASE), "browser.summarize_page", "url"),
+            (re.compile(r"^summarize\s+(?:the\s+)?(?:current\s+)?(?:web\s*page|page)$", re.IGNORECASE), "browser.summarize_page", ""),
+            (re.compile(r"^extract\s+(?:content|text)\s+from\s+(?:web\s*page\s+|url\s+|page\s+)?(https?://\S+)$", re.IGNORECASE), "browser.extract_content", "url"),
+            (re.compile(r"^close\s+(?:the\s+)?browser(?:\s+session)?$", re.IGNORECASE), "browser.close_session", ""),
             (re.compile(r"^(?:open|go to)\s+(?:the\s+)?(google|youtube|github|linkedin|flipkart|instagram|whatsapp|chatgpt)$", re.IGNORECASE), "browser.open_site", "site_name"),
             (re.compile(r"^search\s+(?:knowledge|documents?|in\s+documents?)\s+(?:for\s+)?(.+)$", re.IGNORECASE), "knowledge.search", "query"),
             (re.compile(r"^search\s+github\s+(?:for\s+)?(.+)$", re.IGNORECASE), "browser.search_github", "query"),

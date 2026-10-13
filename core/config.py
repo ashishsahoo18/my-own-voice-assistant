@@ -111,6 +111,44 @@ class AgentSettings(BaseModel):
     loop_detection_window: int = Field(default=3, ge=2, le=5)
 
 
+class BrowserSettings(BaseModel):
+    """Configuration for browser automation and web page extraction."""
+
+    enabled: bool = Field(default=True)
+    headless: bool = Field(default=True)
+    driver_type: str = Field(
+        default_factory=lambda: os.getenv("BROWSER_DRIVER", "auto").strip().lower()
+    )
+    page_load_timeout_seconds: float = Field(
+        default_factory=lambda: float(os.getenv("BROWSER_PAGE_TIMEOUT", "15.0").strip()),
+        ge=2.0,
+        le=60.0,
+    )
+    script_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0)
+    max_page_bytes: int = Field(default=2_000_000, ge=10_000, le=10_000_000)
+    max_text_chars: int = Field(default=100_000, ge=1000, le=500_000)
+    enforce_allowlist: bool = Field(
+        default_factory=lambda: os.getenv("BROWSER_ENFORCE_ALLOWLIST", "true").strip().lower() in {"1", "true", "yes", "on"}
+    )
+    allowed_domains: list[str] = Field(
+        default_factory=lambda: [
+            "google.com",
+            "github.com",
+            "wikipedia.org",
+            "python.org",
+            "stackoverflow.com",
+            "docs.python.org",
+            "pypi.org",
+            "developer.mozilla.org",
+            "w3.org",
+            "arxiv.org",
+            "reuters.com",
+            "bbc.com",
+            "nature.com",
+        ]
+    )
+
+
 class StorageSettings(BaseModel):
     """Storage, database, and logging directories."""
 
@@ -157,6 +195,7 @@ class OliverConfig(BaseModel):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     agent: AgentSettings = Field(default_factory=AgentSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
+    browser: BrowserSettings = Field(default_factory=BrowserSettings)
 
     def is_path_allowed(self, target: Path | str) -> bool:
         """Check if target path is inside allowed root folders."""

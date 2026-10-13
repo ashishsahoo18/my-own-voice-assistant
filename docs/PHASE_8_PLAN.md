@@ -1,7 +1,7 @@
 # OLIVER 2.0 — Phase 8 Capability Expansion Plan
 
 **Date:** October 13, 2026  
-**Status:** Capabilities 1, 2, and 3 COMPLETED & VERIFIED; Capabilities 4–7 Pending Approval  
+**Status:** Capabilities 1, 2, 3, and 4 COMPLETED & VERIFIED; Capabilities 5–7 Pending Approval  
 **Target Branch:** `oliver-2.0`  
 
 ---
@@ -17,7 +17,7 @@ During Phase 0 through Phase 7, OLIVER 2.0 established:
 - Dual-tier Hybrid Memory engine with privacy filtering and semantic recall (Phase 6).
 - Modular real-time audio pipeline with offline Vosk STT, interruptible TTS, safe barge-in, and action-bound confirmations (Phase 7).
 
-Phase 8 expands high-value domain capabilities while strictly maintaining zero paid APIs, security boundaries, and full test suite regression compliance. Capabilities 1 (Research Assistant), 2 (Coding Assistant), and 3 (Documents & Knowledge) are fully implemented and verified.
+Phase 8 expands high-value domain capabilities while strictly maintaining zero paid APIs, security boundaries, and full test suite regression compliance. Capabilities 1 (Research Assistant), 2 (Coding Assistant), 3 (Documents & Knowledge), and 4 (Browser Automation) are fully implemented and verified.
 
 ---
 
@@ -28,7 +28,7 @@ Phase 8 expands high-value domain capabilities while strictly maintaining zero p
 | **1. Research Assistant** | `commands/browser.py` opens URLs in the user's browser via `webbrowser.open()`. | Structured web queries (Wikipedia API, DuckDuckGo API/HTML), clean text extraction, fact extraction, source URL attribution, uncertainty distinction, prompt injection defense, SSRF blocking, and offline fallback. | **COMPLETED & VERIFIED (Phase 8.1)** |
 | **2. Coding Assistant** | Generic Ollama `ai.ask` conversational responses. No structured coding skill, error inspection, or safe code generation pipeline. | Code explanation, syntax/runtime error debugging, patch generation, language detection, and strict non-execution policy gates. | **COMPLETED & VERIFIED (Phase 8.2)** |
 | **3. Documents & Knowledge** | `commands/files.py` basic file CRUD (create/read/delete). `memory/semantic_memory.py` vector-like memory items. | Multi-format reader (TXT, MD, PDF, JSON), document chunking, summary generation, local knowledge index, and granular deletion controls. | **COMPLETED & VERIFIED (Phase 8.3)** |
-| **4. Browser Automation** | `commands/whatsapp.py` blind `pyautogui.press("enter")` delay. `selenium` installed but unmanaged and unconstrained. | Managed headless/visible browser profile, strict domain allowlist, policy-gated navigation, explicit user consent, and zero bypass of auth/CAPTCHAs. | **P4** |
+| **4. Browser Automation** | `commands/whatsapp.py` blind `pyautogui.press("enter")` delay. `selenium` installed but unmanaged and unconstrained. | Managed headless/visible browser profile, strict domain allowlist, policy-gated navigation, explicit user consent, and zero bypass of auth/CAPTCHAs. | **COMPLETED & VERIFIED (Phase 8.4)** |
 | **5. Productivity** | `commands/reminders.py` basic reminder SQLite store; `commands/productivity.py` simple stopwatch. | Verified task state transitions, recurrence rules, daily briefing aggregator (weather + schedule + system health), and reliable verification. | **P5** |
 | **6. Vision & OCR** | `commands/screenshot.py` screen capture via PyAutoGUI. `opencv-python` and `Pillow` installed. | Local image analysis (Ollama `llava`), optional OCR text extraction, explicit permission prompts, zero automatic cloud uploads. | **P6** |
 | **7. Communication** | `commands/whatsapp.py` and `commands/email_service.py` with basic confirmation prompts. | Recipient preview cards, verified delivery checks, status reporting (`SENT`, `FAILED`, `UNVERIFIED`), and credential security. | **P7** |
