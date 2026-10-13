@@ -302,6 +302,46 @@ class AshishAssistant:
             res = eng.execute(TaskRequest(tool_name="coding.learning_hint", arguments={"problem_or_code": hint_topic, "level": 1}))
             return res.message
 
+        # Documents & Knowledge commands
+        if lowered.startswith("index document ") or lowered.startswith("index file "):
+            fp = re.sub(r"^(?:index\s+(?:document|file)\s+)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.index_file", arguments={"file_path": fp}))
+            return res.message
+
+        if lowered.startswith("search knowledge ") or lowered.startswith("search document ") or lowered.startswith("search documents "):
+            q = re.sub(r"^(?:search\s+(?:knowledge|documents?|in\s+documents?)\s+(?:for\s+)?)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.search", arguments={"query": q}))
+            return res.message
+
+        if lowered.startswith("summarize document ") or lowered.startswith("summarize file "):
+            target = re.sub(r"^(?:summarize\s+(?:document|file)\s+)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.summarize_document", arguments={"file_path_or_id": target}))
+            return res.message
+
+        if lowered.startswith("ask document "):
+            q = re.sub(r"^(?:ask\s+document\s+)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.ask_document", arguments={"question": q}))
+            return res.message
+
+        if lowered in ("list documents", "list indexed documents"):
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.list_documents", arguments={}))
+            return res.message
+
         time_date_res = self._handle_time_date_commands(text, lowered)
         if time_date_res:
             return time_date_res

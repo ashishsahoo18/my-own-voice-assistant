@@ -73,9 +73,10 @@ class IntentRouter:
 
             # Browser & Search
             (re.compile(r"^(?:open|go to)\s+(?:the\s+)?(google|youtube|github|linkedin|flipkart|instagram|whatsapp|chatgpt)$", re.IGNORECASE), "browser.open_site", "site_name"),
-            (re.compile(r"^search\s+(?:google\s+(?:for\s+)?)?(.+)$", re.IGNORECASE), "browser.search_google", "query"),
+            (re.compile(r"^search\s+(?:knowledge|documents?|in\s+documents?)\s+(?:for\s+)?(.+)$", re.IGNORECASE), "knowledge.search", "query"),
             (re.compile(r"^search\s+github\s+(?:for\s+)?(.+)$", re.IGNORECASE), "browser.search_github", "query"),
             (re.compile(r"^search\s+(?:stack\s*overflow|stackoverflow)\s+(?:for\s+)?(.+)$", re.IGNORECASE), "browser.search_stackoverflow", "query"),
+            (re.compile(r"^search\s+(?:google\s+(?:for\s+)?)?(.+)$", re.IGNORECASE), "browser.search_google", "query"),
 
             # YouTube
             (re.compile(r"^play\s+(.+)$", re.IGNORECASE), "youtube.play", "query"),
@@ -128,6 +129,14 @@ class IntentRouter:
             (re.compile(r"^(?:generate\s+(?:a\s+|an\s+)?([a-zA-Z0-9\+#]+)\s+(?:code\s+for|view|script|function)\s+)(.+)$", re.IGNORECASE), "coding.generate", ("language", "prompt")),
             (re.compile(r"^(?:generate\s+code\s+for\s+)(.+)$", re.IGNORECASE), "coding.generate", "prompt"),
             (re.compile(r"^(?:give\s+me\s+a\s+hint|hint\s+for|give\s+hint\s+for)\s+(.+)$", re.IGNORECASE), "coding.learning_hint", "problem_or_code"),
+
+            # Documents & Knowledge
+            (re.compile(r"^(?:index\s+(?:document|file)\s+)(.+)$", re.IGNORECASE), "knowledge.index_file", "file_path"),
+            (re.compile(r"^(?:search\s+(?:knowledge|documents?|in\s+documents?)\s+(?:for\s+)?)(.+)$", re.IGNORECASE), "knowledge.search", "query"),
+            (re.compile(r"^(?:summarize\s+(?:document|file)\s+)(.+)$", re.IGNORECASE), "knowledge.summarize_document", "file_path_or_id"),
+            (re.compile(r"^(?:ask\s+document\s+)(.+)$", re.IGNORECASE), "knowledge.ask_document", "question"),
+            (re.compile(r"^(?:list\s+(?:indexed\s+)?documents)$", re.IGNORECASE), "knowledge.list_documents", ""),
+            (re.compile(r"^(?:delete\s+(?:document\s+)?index\s+(?:for\s+)?)(.+)$", re.IGNORECASE), "knowledge.delete_document_index", "doc_id_or_name"),
         ]
 
     def route(self, text: str) -> RouteResult:

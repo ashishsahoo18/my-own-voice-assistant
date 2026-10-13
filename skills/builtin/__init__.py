@@ -10,6 +10,7 @@ from skills.builtin.communication_skill import CommunicationSkill
 from skills.builtin.contacts_skill import ContactsSkill
 from skills.builtin.files_skill import FilesSkill
 from skills.builtin.info_skill import InfoSkill
+from skills.builtin.knowledge_skill import KnowledgeSkill
 from skills.builtin.memory_skill import MemorySkill
 from skills.builtin.productivity_skill import ProductivitySkill
 from skills.builtin.research_skill import ResearchSkill
@@ -36,6 +37,7 @@ def register_all_builtin_skills(registry: SkillRegistry | None = None) -> SkillR
         AgentSkill,
         ResearchSkill,
         CodingSkill,
+        KnowledgeSkill,
     ]
 
     for cls in builtin_classes:

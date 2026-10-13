@@ -142,6 +142,47 @@ CREATE INDEX IF NOT EXISTS idx_agent_tasks_status ON agent_tasks(status, updated
 CREATE INDEX IF NOT EXISTS idx_agent_steps_task ON agent_task_steps(task_id, step_number);
 """
 
+MIGRATION_V3_SQL = """
+-- Migration V3: Documents & Knowledge Persistent Store with SQLite FTS5
+CREATE TABLE IF NOT EXISTS indexed_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_id TEXT UNIQUE NOT NULL,
+    file_path TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    file_hash TEXT NOT NULL,
+    file_type TEXT NOT NULL,
+    file_size INTEGER NOT NULL,
+    total_chunks INTEGER NOT NULL DEFAULT 0,
+    total_pages INTEGER NOT NULL DEFAULT 1,
+    metadata_json TEXT DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS document_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    chunk_id TEXT UNIQUE NOT NULL,
+    doc_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    page_number INTEGER NOT NULL DEFAULT 1,
+    content TEXT NOT NULL,
+    char_count INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY(doc_id) REFERENCES indexed_documents(doc_id) ON DELETE CASCADE
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS document_chunks_fts USING fts5(
+    chunk_id,
+    doc_id,
+    filename,
+    content,
+    tokenize='porter unicode61'
+);
+
+CREATE INDEX IF NOT EXISTS idx_indexed_docs_hash ON indexed_documents(file_hash);
+CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_id ON document_chunks(doc_id, chunk_index);
+"""
+
 
 class UnifiedDatabase:
     """Thread-safe SQLite connection and transaction manager in WAL mode."""
@@ -244,6 +285,26 @@ class UnifiedDatabase:
                     conn.execute(
                         "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
                         (2, "v2_agent_task_persistence", now),
+                    )
+
+            if curr_version < 3:
+                logger.info("Applying schema migration V3 (Documents & Knowledge FTS5) to %s", self.db_path)
+                try:
+                    if self.db_path.exists() and self.db_path.stat().st_size > 0:
+                        backup_dir = self.db_path.parent / "backups"
+                        backup_dir.mkdir(parents=True, exist_ok=True)
+                        backup_path = backup_dir / f"oliver_pre_v3_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+                        import shutil
+                        shutil.copy2(str(self.db_path), str(backup_path))
+                except Exception as bkp_err:
+                    logger.warning("Could not create pre-migration backup: %s", bkp_err)
+
+                with conn:
+                    conn.executescript(MIGRATION_V3_SQL)
+                    now = datetime.now().isoformat()
+                    conn.execute(
+                        "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+                        (3, "v3_documents_knowledge_fts", now),
                     )
 
     def get_journal_mode(self) -> str:
