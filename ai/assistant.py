@@ -251,6 +251,57 @@ class AshishAssistant:
             res = eng.execute(TaskRequest(tool_name="research.search", arguments={"query": q}))
             return res.message
 
+        if (
+            lowered.startswith("explain code")
+            or lowered.startswith("explain this code")
+            or re.match(r"^explain\s+this\s+[a-zA-Z0-9\+#]+\s+code", lowered)
+        ):
+            code_text = re.sub(r"^(?:explain\s+(?:this\s+)?[a-zA-Z0-9\+#]*\s*code(?::|\s+)?)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.explain", arguments={"code": code_text}))
+            return res.message
+
+        if (
+            lowered.startswith("help me fix this error")
+            or lowered.startswith("help me fix error")
+            or lowered.startswith("diagnose error")
+            or lowered.startswith("diagnose this error")
+        ):
+            err_text = re.sub(r"^(?:help\s+me\s+fix\s+(?:this\s+)?error|diagnose\s+(?:this\s+)?error)(?::|\s+)?", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.diagnose_error", arguments={"error_log": err_text}))
+            return res.message
+
+        if lowered.startswith("review this code") or lowered.startswith("review code") or "review this function" in lowered:
+            code_text = re.sub(r"^(?:review\s+(?:this\s+)?(?:code|function)(?:\s+for\s+bugs)?(?::|\s+)?)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.review", arguments={"code": code_text}))
+            return res.message
+
+        if lowered.startswith("generate code for ") or re.match(r"^generate\s+(?:a\s+|an\s+)?[a-zA-Z0-9\+#]+\s+code\s+for", lowered):
+            m = re.match(r"^generate\s+(?:(?:a\s+|an\s+)?([a-zA-Z0-9\+#]+)\s+code\s+for\s+|code\s+for\s+)(.+)$", text, re.IGNORECASE)
+            lang = m.group(1).strip() if m and m.group(1) else "Python"
+            p = m.group(2).strip() if m and m.group(2) else text
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.generate", arguments={"prompt": p, "language": lang}))
+            return res.message
+
+        if lowered.startswith("give me a hint") or lowered.startswith("give hint"):
+            hint_topic = re.sub(r"^(?:give\s+(?:me\s+)?a?\s*hint(?:\s+for|\s+before\s+showing\s+the\s+solution)?(?::|\s+)?)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.learning_hint", arguments={"problem_or_code": hint_topic, "level": 1}))
+            return res.message
+
         time_date_res = self._handle_time_date_commands(text, lowered)
         if time_date_res:
             return time_date_res

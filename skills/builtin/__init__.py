@@ -5,6 +5,7 @@ from __future__ import annotations
 from skills.builtin.agent_skill import AgentSkill
 from skills.builtin.ai_skill import AISkill
 from skills.builtin.browser_skill import BrowserSkill
+from skills.builtin.coding_skill import CodingSkill
 from skills.builtin.communication_skill import CommunicationSkill
 from skills.builtin.contacts_skill import ContactsSkill
 from skills.builtin.files_skill import FilesSkill
@@ -34,6 +35,7 @@ def register_all_builtin_skills(registry: SkillRegistry | None = None) -> SkillR
         MemorySkill,
         AgentSkill,
         ResearchSkill,
+        CodingSkill,
     ]
 
     for cls in builtin_classes:

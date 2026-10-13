@@ -118,6 +118,16 @@ class IntentRouter:
             (re.compile(r"^(?:research|web\s+research|search\s+web\s+for|find\s+information\s+about)\s+(.+)$", re.IGNORECASE), "research.search", "query"),
             (re.compile(r"^(?:fetch|read)\s+(?:web\s*page\s+|url\s+)?(https?://\S+)$", re.IGNORECASE), "research.fetch_page", "url"),
             (re.compile(r"^(?:explain\s+topic|overview\s+of)\s+(.+)$", re.IGNORECASE), "research.explain_topic", "topic"),
+
+            # Coding Assistant
+            (re.compile(r"^(?:explain\s+(?:this\s+)?code|explain\s+code)(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.explain", "code"),
+            (re.compile(r"^(?:explain\s+this\s+([a-zA-Z0-9\+#]+)\s+code)(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.explain", ("language", "code")),
+            (re.compile(r"^(?:help\s+(?:me\s+)?fix\s+(?:this\s+)?error|diagnose\s+(?:this\s+)?error)(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.diagnose_error", "error_log"),
+            (re.compile(r"^(?:help\s+(?:me\s+)?fix\s+this\s+([a-zA-Z0-9\+#]+)\s+error)(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.diagnose_error", ("language", "error_log")),
+            (re.compile(r"^(?:review\s+(?:this\s+)?code|review\s+this\s+function)(?:\s+for\s+bugs)?(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.review", "code"),
+            (re.compile(r"^(?:generate\s+(?:a\s+|an\s+)?([a-zA-Z0-9\+#]+)\s+(?:code\s+for|view|script|function)\s+)(.+)$", re.IGNORECASE), "coding.generate", ("language", "prompt")),
+            (re.compile(r"^(?:generate\s+code\s+for\s+)(.+)$", re.IGNORECASE), "coding.generate", "prompt"),
+            (re.compile(r"^(?:give\s+me\s+a\s+hint|hint\s+for|give\s+hint\s+for)\s+(.+)$", re.IGNORECASE), "coding.learning_hint", "problem_or_code"),
         ]
 
     def route(self, text: str) -> RouteResult:
@@ -131,7 +141,11 @@ class IntentRouter:
             match = pattern.match(clean_text)
             if match:
                 args = {}
-                if arg_key and match.groups():
+                if isinstance(arg_key, (list, tuple)) and match.groups():
+                    for idx, k in enumerate(arg_key):
+                        if idx < len(match.groups()) and k:
+                            args[k] = match.group(idx + 1).strip() if match.group(idx + 1) else ""
+                elif arg_key and match.groups():
                     val = match.group(1)
                     args[arg_key] = val.strip() if val else ""
                 elif arg_key == "text":
