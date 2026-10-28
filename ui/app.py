@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 import os
+import threading
 from datetime import datetime
-from typing import Optional
+from typing import Any, Callable, Optional
 import customtkinter as ctk
 
 try:
