@@ -124,6 +124,7 @@ class ChatStore:
 
     def create_session(self, title: Optional[str] = None) -> int:
         """Create and return a new chat session ID."""
+        session_title = title.strip() if title and title.strip() else "New Chat"
         now = self._now()
 
         with self._connect() as connection:
@@ -132,7 +133,7 @@ class ChatStore:
                 INSERT INTO chat_sessions (title, started_at, updated_at)
                 VALUES (?, ?, ?)
                 """,
-                (title, now, now),
+                (session_title, now, now),
             )
             connection.commit()
             return int(cursor.lastrowid)
