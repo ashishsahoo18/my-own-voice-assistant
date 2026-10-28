@@ -232,6 +232,10 @@ class BrowserAutomationTests(unittest.TestCase):
             self.driver_manager._http_client,
             "get",
             return_value=(sample_html, "https://example.com/page", {"content-type": "text/html"}),
+        ), patch.object(
+            self.security,
+            "validate_target_url",
+            return_value=("https://example.com/page", ["93.184.216.34"]),
         ):
             nav = self.service.open_page("https://example.com/page")
             self.assertEqual(nav.status, "VERIFIED")

@@ -157,12 +157,81 @@ class AshishAssistant:
         # AI Q&A Fallback (does not open browser/ChatGPT)
         return self.ai_service.ask(text)
 
-    def execute_confirmed_command(self, command_payload: str) -> str:
-        """Execute a WhatsApp, Email, or dangerous command through the central ExecutionEngine."""
+    def handle_result(self, message: str, confirmation_token: Optional[str] = None) -> Any:
+        """Route and execute request through the central ExecutionEngine, returning typed ToolResult."""
+        from router.router import IntentRouter
+        from skills.base import ToolResult
+
+        text = message.strip()
+        if not text:
+            return ToolResult(status="FAILED", message="Please say or type a command so I can help.")
+
+        if self.oliver_router is None:
+            self.oliver_router = IntentRouter()
+
+        route_res = self.oliver_router.route(text)
+        if route_res.matched:
+            tool_res = self.oliver_router.execute_route_result(
+                route_res,
+                confirmation_token=confirmation_token,
+            )
+            self.intent_type = route_res.tool_name.split(".")[0].upper()
+            return tool_res
+
+        # If not deterministically matched by router, fall back to handle(message)
+        legacy_reply = self.handle(message)
+        if legacy_reply.startswith("CONFIRMATION_REQUIRED:"):
+            from security.confirmation import get_confirmation_manager
+            conf_mgr = get_confirmation_manager()
+            summary = legacy_reply.split(":", 1)[1]
+            if summary.startswith("WHATSAPP:"):
+                parts = summary.split(":", 1)[1].split("|")
+                summary = f"Send WhatsApp message to '{parts[0]}' (+{parts[1]}): \"{parts[2]}\""
+            elif summary.startswith("EMAIL:"):
+                parts = summary.split(":", 1)[1].split("|")
+                summary = f"Send email to '{parts[0]}' ({parts[1]}) with subject '{parts[2]}': \"{parts[3]}\""
+
+            req = conf_mgr.create_request(
+                action="legacy_action",
+                risk_level=2,
+                summary=summary,
+                details={"legacy_payload": legacy_reply},
+            )
+            return ToolResult(
+                status="NEED_CONFIRM",
+                message=summary,
+                data={"token": req.token, "payload": legacy_reply, "tool_name": "legacy_action"},
+            )
+
+        status = "UNVERIFIED"
+        if legacy_reply.startswith("Error") or "failed" in legacy_reply.lower() or "not available" in legacy_reply.lower():
+            status = "FAILED"
+        return ToolResult(
+            status=status,
+            message=legacy_reply,
+            data={"raw_response": legacy_reply},
+        )
+
+    def execute_confirmed_command_result(self, command_payload: str, confirmation_token: Optional[str] = None) -> Any:
+        """Execute a confirmed action returning typed ToolResult."""
         from execution.engine import get_execution_engine
         from execution.request import TaskRequest
+        from skills.base import ToolResult
 
         engine = get_execution_engine()
+        if isinstance(command_payload, dict):
+            tool_name = command_payload.get("tool_name", "")
+            args = command_payload.get("arguments", {})
+            token = confirmation_token or command_payload.get("token")
+            return engine.execute(
+                TaskRequest(
+                    tool_name=tool_name,
+                    arguments=args,
+                    confirmation_token=token,
+                    user_confirmed=True,
+                )
+            )
+
         text = command_payload.strip()
 
         if text.startswith("CONFIRMATION_REQUIRED:WHATSAPP:") or text.startswith("WHATSAPP:"):
@@ -170,57 +239,52 @@ class AshishAssistant:
             parts = payload.split("|")
             if len(parts) >= 3:
                 recipient, phone, message = parts[0], parts[1], parts[2]
-                res = engine.execute(
+                return engine.execute(
                     TaskRequest(
                         tool_name="communication.whatsapp_send",
                         arguments={"phone": phone, "message": message, "recipient": recipient},
+                        confirmation_token=confirmation_token,
                         user_confirmed=True,
                     )
                 )
-                if res.status in ("DENIED", "CANCELLED"):
-                    return f"Policy denied: {res.message}"
-                return res.message
 
         if text.startswith("CONFIRMATION_REQUIRED:EMAIL:") or text.startswith("EMAIL:"):
             payload = text.split(":", 2)[-1]
             parts = payload.split("|")
             if len(parts) >= 4:
                 recipient, email, subject, message = parts[0], parts[1], parts[2], parts[3]
-                res = engine.execute(
+                return engine.execute(
                     TaskRequest(
                         tool_name="communication.email_send",
                         arguments={"email": email, "subject": subject, "message": message, "recipient": recipient},
+                        confirmation_token=confirmation_token,
                         user_confirmed=True,
                     )
                 )
-                if res.status in ("DENIED", "CANCELLED"):
-                    return f"Policy denied: {res.message}"
-                return res.message
 
         lowered = text.lower()
         if "shutdown" in lowered:
-            res = engine.execute(TaskRequest(tool_name="windows.shutdown", user_confirmed=True))
-            if res.status in ("DENIED", "CANCELLED"):
-                return f"Policy denied: {res.message}"
-            return res.message
+            return engine.execute(TaskRequest(tool_name="windows.shutdown", confirmation_token=confirmation_token, user_confirmed=True))
         if "restart" in lowered:
-            res = engine.execute(TaskRequest(tool_name="windows.restart", user_confirmed=True))
-            if res.status in ("DENIED", "CANCELLED"):
-                return f"Policy denied: {res.message}"
-            return res.message
+            return engine.execute(TaskRequest(tool_name="windows.restart", confirmation_token=confirmation_token, user_confirmed=True))
         if "delete file" in lowered:
-            res = engine.execute(
+            return engine.execute(
                 TaskRequest(
                     tool_name="files.delete_file",
                     arguments={"path": "deleted_placeholder.txt"},
+                    confirmation_token=confirmation_token,
                     user_confirmed=True,
                 )
             )
-            if res.status in ("DENIED", "CANCELLED"):
-                return f"Policy denied: {res.message}"
-            return res.message
 
-        return "Command executed."
+        return ToolResult(status="UNVERIFIED", message="Command executed.")
+
+    def execute_confirmed_command(self, command_payload: str) -> str:
+        """Execute a WhatsApp, Email, or dangerous command through the central ExecutionEngine."""
+        res = self.execute_confirmed_command_result(command_payload)
+        if hasattr(res, "status") and res.status in ("DENIED", "CANCELLED"):
+            return f"Policy denied: {res.message}"
+        return getattr(res, "message", str(res))
 
     def _handle_time_date_commands(self, text: str, lowered: str) -> str | None:
         time_triggers = ["current time", "time is it", "what time", "time now", "tell me the time", "clock"]

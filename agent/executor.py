@@ -55,6 +55,24 @@ class AgentTaskLoop:
 
         self._cancelled_tasks: set[str] = set()
 
+    def _notify_progress(
+        self,
+        callback: Optional[Callable[[str, int, int, str, str, str], None]],
+        task_id: str,
+        step: int,
+        total_steps: int,
+        tool_name: str,
+        description: str,
+        status: str,
+    ) -> None:
+        """Safely invoke progress callback with exception isolation."""
+        if not callback:
+            return
+        try:
+            callback(task_id, step, total_steps, tool_name, description, status)
+        except Exception as exc:
+            logger.warning("Progress callback raised exception: %s", exc)
+
     def cancel(self, task_id: str) -> None:
         """Mark a task as cancelled."""
         self._cancelled_tasks.add(task_id)
@@ -69,6 +87,7 @@ class AgentTaskLoop:
         session_id: str = "default",
         user_confirmed: bool = False,
         plan_override: Optional[Plan] = None,
+        on_progress: Optional[Callable[[str, int, int, str, str, str], None]] = None,
     ) -> TaskReport:
         """Execute a complete multi-step task for a given user goal."""
         tid = task_id or f"task_{uuid.uuid4().hex[:12]}"
@@ -77,6 +96,7 @@ class AgentTaskLoop:
 
         # 1. Kill Switch & Cancellation pre-check
         if self.is_cancelled(tid):
+            self._notify_progress(on_progress, tid, 0, 0, "system", "Task cancelled", "cancelled")
             return TaskReport(
                 task_id=tid,
                 goal=goal,
@@ -86,6 +106,7 @@ class AgentTaskLoop:
             )
 
         # 2. Plan generation (or use validated override)
+        self._notify_progress(on_progress, tid, 0, 0, "planner", f"Planning steps for: {goal}", "planning")
         if plan_override:
             plan = plan_override
         else:
@@ -95,6 +116,7 @@ class AgentTaskLoop:
         is_valid, validation_errors = self.validator.validate(plan)
         if not is_valid:
             err_msg = "; ".join(validation_errors)
+            self._notify_progress(on_progress, tid, 0, 0, "validator", f"Validation failed: {err_msg}", "failed")
             self.store.save_task(tid, goal, plan, status="VALIDATION_FAILED")
             return TaskReport(
                 task_id=tid,
@@ -117,6 +139,7 @@ class AgentTaskLoop:
             start_time=start_time,
             completed_steps=[],
             tool_calls_count=0,
+            on_progress=on_progress,
         )
 
     def resume(
@@ -124,11 +147,13 @@ class AgentTaskLoop:
         task_id: str,
         session_id: str = "default",
         user_confirmed: bool = False,
+        on_progress: Optional[Callable[[str, int, int, str, str, str], None]] = None,
     ) -> TaskReport:
         """Resume an interrupted task without repeating already verified completed steps."""
         start_time = time.time()
         resumable = self.store.get_resumable_task(task_id)
         if not resumable:
+            self._notify_progress(on_progress, task_id, 0, 0, "system", "No resumable task found", "failed")
             return TaskReport(
                 task_id=task_id,
                 goal="",
@@ -145,6 +170,7 @@ class AgentTaskLoop:
         remaining_steps = [s for s in plan.steps if s.step_number not in completed_step_nums]
 
         if not remaining_steps:
+            self._notify_progress(on_progress, task_id, len(completed_steps), len(completed_steps), "completed", "All steps already completed", "completed")
             return TaskReport(
                 task_id=task_id,
                 goal=goal,
@@ -167,6 +193,7 @@ class AgentTaskLoop:
             start_time=start_time,
             completed_steps=completed_steps,
             tool_calls_count=len(completed_steps),
+            on_progress=on_progress,
         )
 
     def _execute_plan_loop(
@@ -179,6 +206,7 @@ class AgentTaskLoop:
         start_time: float,
         completed_steps: list[StepResult],
         tool_calls_count: int,
+        on_progress: Optional[Callable[[str, int, int, str, str, str], None]] = None,
     ) -> TaskReport:
         """Main execution loop iterating sequentially through plan steps."""
         all_step_results: list[StepResult] = list(completed_steps)
@@ -191,6 +219,7 @@ class AgentTaskLoop:
 
             # A. Check Cancellation & Kill Switch
             if self.is_cancelled(task_id):
+                self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, "Task cancelled", "cancelled")
                 self.store.update_task_status(task_id, "CANCELLED", current_step=step.step_number, replan_count=replan_attempts)
                 return self._build_report(
                     task_id=task_id,
@@ -205,6 +234,7 @@ class AgentTaskLoop:
             # B. Check Resource Limits: Timeout
             elapsed = time.time() - start_time
             if elapsed > self.task_timeout_s:
+                self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, "Task timed out", "failed")
                 self.store.update_task_status(task_id, "TIMEOUT", current_step=step.step_number, replan_count=replan_attempts)
                 timeout_res = StepResult(
                     step_number=step.step_number,
@@ -226,6 +256,7 @@ class AgentTaskLoop:
 
             # C. Check Resource Limits: Maximum tool invocations
             if current_calls >= self.max_tool_calls:
+                self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, "Max tool calls reached", "failed")
                 self.store.update_task_status(task_id, "FAILED", current_step=step.step_number, replan_count=replan_attempts)
                 limit_res = StepResult(
                     step_number=step.step_number,
@@ -249,6 +280,7 @@ class AgentTaskLoop:
             try:
                 self.loop_detector.check_or_raise(step.tool_name, step.arguments)
             except LoopDetectedError as loop_err:
+                self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, str(loop_err), "failed")
                 loop_res = StepResult(
                     step_number=step.step_number,
                     tool_name=step.tool_name,
@@ -271,6 +303,7 @@ class AgentTaskLoop:
 
             # E. Confirmation Enforcement
             if step.requires_confirmation and not user_confirmed:
+                self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, step.description or "Awaiting confirmation", "waiting_for_confirmation")
                 confirm_res = StepResult(
                     step_number=step.step_number,
                     tool_name=step.tool_name,
@@ -292,6 +325,7 @@ class AgentTaskLoop:
                 )
 
             # F. Execute Action through Authoritative ExecutionEngine
+            self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, step.description or f"Executing step {step.step_number}", "executing_step")
             current_calls += 1
             task_req = TaskRequest(
                 tool_name=step.tool_name,
@@ -302,6 +336,20 @@ class AgentTaskLoop:
             )
 
             exec_res = self.engine.execute(task_req)
+
+            # Re-check cancellation immediately after step execution
+            if self.is_cancelled(task_id):
+                self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, "Task cancelled after step", "cancelled")
+                self.store.update_task_status(task_id, "CANCELLED", current_step=step.step_number, replan_count=replan_attempts)
+                return self._build_report(
+                    task_id=task_id,
+                    goal=goal,
+                    overall_status="CANCELLED",
+                    step_results=all_step_results,
+                    start_time=start_time,
+                    replan_count=replan_attempts,
+                    summary_prefix="Execution cancelled after step.",
+                )
 
             # G. Evaluate Step Verification and Status
             is_step_success = False
@@ -360,6 +408,7 @@ class AgentTaskLoop:
                 # Step failed or denied
                 if step_status in ("DENIED", "CANCELLED"):
                     # Non-recoverable policy denial: halt immediately
+                    self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, f"Policy blocked: {exec_res.message}", "failed")
                     self.store.update_task_status(task_id, step_status, current_step=step.step_number, replan_count=replan_attempts)
                     return self._build_report(
                         task_id=task_id,
@@ -389,11 +438,13 @@ class AgentTaskLoop:
                             plan = new_plan
                             plan.replan_count = replan_attempts
                             step_idx = 0
+                            self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, "Replanning recovery plan", "planning")
                             self.store.update_task_status(task_id, "REPLANNING", current_step=step.step_number, replan_count=replan_attempts, plan=plan)
                             continue
 
                 # Replanning either unavailable, exhausted, or failed
                 final_status = "REPLAN_EXHAUSTED" if replan_attempts >= self.max_replans else "FAILED"
+                self._notify_progress(on_progress, task_id, step.step_number, len(plan.steps), step.tool_name, f"Step failed: {exec_res.message}", "failed")
                 self.store.update_task_status(task_id, final_status, current_step=step.step_number, replan_count=replan_attempts)
                 return self._build_report(
                     task_id=task_id,
@@ -406,6 +457,7 @@ class AgentTaskLoop:
                 )
 
         # All steps completed successfully
+        self._notify_progress(on_progress, task_id, len(plan.steps), len(plan.steps), "completed", "All steps completed successfully", "completed")
         self.store.update_task_status(task_id, "SUCCESS", current_step=len(plan.steps), replan_count=replan_attempts)
         return self._build_report(
             task_id=task_id,

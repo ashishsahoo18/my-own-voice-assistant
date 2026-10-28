@@ -196,12 +196,21 @@ class PolicyEngine:
             return "Reboot the computer workstation."
         if "sleep" in lowered:
             return "Put the workstation into sleep mode."
-        if "delete_file" in lowered or "delete" in lowered:
+        if "delete_task" in lowered:
+            return f"Permanently delete task (ID: {args.get('task_id', '')})."
+        if "delete_reminder" in lowered:
+            return f"Permanently delete reminder (ID: {args.get('reminder_id', '')})."
+        if "delete_note" in lowered:
+            return f"Permanently delete note (ID: {args.get('note_id', '')})."
+        if "delete_file" in lowered:
             target = args.get("path") or args.get("target") or "file"
             return f"Delete '{target}' (moves to Windows Recycle Bin)."
         if "delete_folder" in lowered:
             target = args.get("path") or args.get("target") or "folder"
             return f"Delete folder '{target}' and its contents (moves to Windows Recycle Bin)."
+        if "delete" in lowered:
+            target = args.get("path") or args.get("target") or "item"
+            return f"Delete '{target}'."
         if "whatsapp" in lowered:
             recipient = args.get("recipient") or args.get("number") or "contact"
             msg = args.get("message") or ""

@@ -364,6 +364,39 @@ class BrowserVerifier(BaseVerifier):
         )
 
 
+class ProductivityVerifier(BaseVerifier):
+    """Verifies task, reminder, note, and calculation executions with concrete evidence."""
+
+    def verify(
+        self,
+        tool_name: str,
+        arguments: dict[str, Any],
+        raw_result: Any,
+    ) -> VerificationResult:
+        if hasattr(raw_result, "status") and raw_result.status in ("FAILED", "DENIED", "CANCELLED", "TIMEOUT"):
+            return VerificationResult(
+                status=raw_result.status,
+                evidence=getattr(raw_result, "evidence", {}),
+                message=getattr(raw_result, "message", str(raw_result)),
+            )
+
+        data = getattr(raw_result, "data", {}) if hasattr(raw_result, "data") else {}
+        msg = getattr(raw_result, "message", str(raw_result))
+
+        if data or (msg and "success" in msg.lower()) or getattr(raw_result, "is_success", False):
+            return VerificationResult(
+                status="VERIFIED",
+                evidence={"data_fields": list(data.keys()) if isinstance(data, dict) else [], "has_output": bool(msg)},
+                message=str(msg),
+            )
+
+        return VerificationResult(
+            status="UNVERIFIED",
+            evidence={"raw_result": str(raw_result)[:100]},
+            message="Productivity action completed with unverified state.",
+        )
+
+
 class VerifierRegistry:
     """Dispatches tool execution results to the appropriate domain verifier."""
 
@@ -372,10 +405,13 @@ class VerifierRegistry:
         self.process_verifier = ProcessVerifier()
         self.communication_verifier = CommunicationVerifier()
         self.browser_verifier = BrowserVerifier()
+        self.productivity_verifier = ProductivityVerifier()
         self.generic_verifier = GenericVerifier()
 
     def get_verifier(self, tool_name: str) -> BaseVerifier:
         lowered = tool_name.lower()
+        if lowered.startswith("productivity."):
+            return self.productivity_verifier
         if lowered.startswith("browser."):
             return self.browser_verifier
         if lowered.startswith("files.") or "file" in lowered or "folder" in lowered:
@@ -385,3 +421,4 @@ class VerifierRegistry:
         if "whatsapp" in lowered or "email" in lowered or lowered.startswith("communication."):
             return self.communication_verifier
         return self.generic_verifier
+

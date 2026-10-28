@@ -183,6 +183,32 @@ CREATE INDEX IF NOT EXISTS idx_indexed_docs_hash ON indexed_documents(file_hash)
 CREATE INDEX IF NOT EXISTS idx_doc_chunks_doc_id ON document_chunks(doc_id, chunk_index);
 """
 
+MIGRATION_V4_SQL = """
+-- Migration V4: Productivity Tasks, Enhanced Reminders, and Searchable Notes
+
+CREATE TABLE IF NOT EXISTS user_tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    description TEXT DEFAULT '',
+    due_date TEXT,
+    priority TEXT NOT NULL DEFAULT 'normal',
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TEXT NOT NULL,
+    completed_at TEXT,
+    metadata_json TEXT DEFAULT '{}'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+    note_id UNINDEXED,
+    title,
+    content,
+    tokenize='porter unicode61'
+);
+
+CREATE INDEX IF NOT EXISTS idx_tasks_status_due ON user_tasks(status, due_date);
+CREATE INDEX IF NOT EXISTS idx_tasks_priority ON user_tasks(priority);
+"""
+
 
 class UnifiedDatabase:
     """Thread-safe SQLite connection and transaction manager in WAL mode."""
@@ -217,12 +243,11 @@ class UnifiedDatabase:
         return conn
 
     @contextmanager
-    def transaction(self) -> Generator[sqlite3.Cursor, None, None]:
+    def transaction(self) -> Generator[sqlite3.Connection, None, None]:
         """Context manager providing an atomic database transaction with rollback on failure."""
         conn = self.get_connection()
-        cursor = conn.cursor()
         try:
-            yield cursor
+            yield conn
             conn.commit()
         except Exception as exc:
             conn.rollback()
@@ -251,6 +276,19 @@ class UnifiedDatabase:
         cursor = conn.cursor()
         cursor.execute(sql, params)
         return cursor.fetchall()
+
+    def check_integrity(self, quick: bool = False) -> tuple[bool, str]:
+        """Run SQLite integrity or quick check to verify database health."""
+        pragma = "PRAGMA quick_check;" if quick else "PRAGMA integrity_check;"
+        try:
+            conn = self.get_connection()
+            with self._lock:
+                row = conn.execute(pragma).fetchone()
+                res = row[0] if row else "unknown"
+                is_ok = (res == "ok")
+                return is_ok, res
+        except Exception as exc:
+            return False, str(exc)
 
     def _initialize_database(self) -> None:
         """Apply schema versioning and run pending migrations."""
@@ -306,6 +344,85 @@ class UnifiedDatabase:
                         "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
                         (3, "v3_documents_knowledge_fts", now),
                     )
+
+            if curr_version < 4:
+                logger.info("Applying schema migration V4 (Productivity Tasks, Scheduler & Notes FTS) to %s", self.db_path)
+                backup_path = None
+                try:
+                    if self.db_path.exists() and self.db_path.stat().st_size > 0:
+                        backup_dir = self.db_path.parent / "backups"
+                        backup_dir.mkdir(parents=True, exist_ok=True)
+                        backup_path = backup_dir / f"oliver_pre_v4_{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+                        # Flush WAL frames before backup
+                        try:
+                            conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+                        except Exception:
+                            pass
+                        # Use SQLite Online Backup API for point-in-time consistency
+                        backup_conn = sqlite3.connect(str(backup_path))
+                        conn.backup(backup_conn)
+                        backup_conn.close()
+
+                        # Validate backup integrity
+                        chk_conn = sqlite3.connect(str(backup_path))
+                        integrity = chk_conn.execute("PRAGMA integrity_check").fetchone()[0]
+                        chk_conn.close()
+                        if integrity != "ok":
+                            logger.error("Pre-migration V4 backup integrity failed: %s", integrity)
+                            raise RuntimeError(f"Backup integrity check failed: {integrity}")
+                except Exception as bkp_err:
+                    logger.warning("Could not create verified pre-migration V4 backup: %s", bkp_err)
+
+                try:
+                    with conn:
+                        # 1. Dynamically inspect existing columns on reminders table
+                        cur = conn.cursor()
+                        existing_cols = {row[1] for row in cur.execute("PRAGMA table_info(reminders)").fetchall()}
+                        columns_to_add = [
+                            ("recurrence", "TEXT DEFAULT 'none'"),
+                            ("priority", "TEXT DEFAULT 'normal'"),
+                            ("status", "TEXT DEFAULT 'pending'"),
+                            ("lease_until", "TEXT DEFAULT NULL"),
+                            ("claimed_by", "TEXT DEFAULT NULL"),
+                            ("dispatched_at", "TEXT DEFAULT NULL"),
+                            ("delivery_channels", "TEXT DEFAULT '[]'"),
+                            ("dispatch_attempts", "INTEGER DEFAULT 0"),
+                            ("last_error", "TEXT DEFAULT NULL"),
+                        ]
+                        for col_name, col_type in columns_to_add:
+                            if col_name not in existing_cols:
+                                cur.execute(f"ALTER TABLE reminders ADD COLUMN {col_name} {col_type};")
+
+                        # 2. Run V4 core DDL
+                        cur.executescript(MIGRATION_V4_SQL)
+
+                        # 3. Create index on enhanced reminder columns if not existing
+                        try:
+                            cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_status_remind ON reminders(status, remind_at);")
+                            cur.execute("CREATE INDEX IF NOT EXISTS idx_reminders_lease ON reminders(status, lease_until);")
+                        except Exception:
+                            pass
+
+                        # 4. Populate notes_fts from existing notes if any exist
+                        try:
+                            cur.execute(
+                                "INSERT INTO notes_fts (note_id, title, content) "
+                                "SELECT id, title, content FROM notes "
+                                "WHERE id NOT IN (SELECT note_id FROM notes_fts);"
+                            )
+                        except Exception:
+                            pass
+
+                        # 5. Record migration
+                        now = datetime.now().isoformat()
+                        cur.execute(
+                            "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, ?)",
+                            (4, "v4_productivity_tasks_scheduler_fts", now),
+                        )
+                except Exception as mig_err:
+                    logger.error("Migration V4 failed: %s. Attempting safe rollback...", mig_err)
+                    # If we made a backup, do NOT blindly overwrite if database received newer writes
+                    raise
 
     def get_journal_mode(self) -> str:
         """Return the current SQLite journal mode."""

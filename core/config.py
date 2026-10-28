@@ -168,11 +168,33 @@ class StorageSettings(BaseModel):
         self.screenshots_dir.mkdir(parents=True, exist_ok=True)
 
 
+class ProductivitySettings(BaseModel):
+    """Configuration for productivity assistant, task tracking, and reminder scheduling."""
+
+    enabled: bool = Field(default=True)
+    scheduler_interval_seconds: float = Field(
+        default_factory=lambda: float(os.getenv("PRODUCTIVITY_POLL_INTERVAL", "5.0").strip()),
+        ge=1.0,
+        le=60.0,
+    )
+    missed_grace_hours: float = Field(
+        default_factory=lambda: float(os.getenv("PRODUCTIVITY_MISSED_GRACE_HOURS", "24.0").strip()),
+        ge=1.0,
+        le=168.0,
+    )
+    lease_duration_seconds: float = Field(default=30.0, ge=5.0, le=120.0)
+    max_dispatch_retries: int = Field(default=3, ge=1, le=10)
+    auto_advance_recurring: bool = Field(default=True)
+
+
 class OliverConfig(BaseModel):
     """Master application configuration for OLIVER 2.0."""
 
     app_name: str = Field(
-        default_factory=lambda: os.getenv("APP_NAME", "OLIVER").strip()
+        default_factory=lambda: os.getenv("APP_NAME", "OLIVER 2.0").strip()
+    )
+    cockpit_title: str = Field(
+        default_factory=lambda: os.getenv("COCKPIT_TITLE", "OLIVER 2.0 — Windows AI Cockpit").strip()
     )
     version: str = Field(default="2.0.0")
     user_name: str = Field(
@@ -196,6 +218,7 @@ class OliverConfig(BaseModel):
     agent: AgentSettings = Field(default_factory=AgentSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     browser: BrowserSettings = Field(default_factory=BrowserSettings)
+    productivity: ProductivitySettings = Field(default_factory=ProductivitySettings)
 
     def is_path_allowed(self, target: Path | str) -> bool:
         """Check if target path is inside allowed root folders."""

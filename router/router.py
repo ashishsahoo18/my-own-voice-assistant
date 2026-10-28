@@ -97,10 +97,22 @@ class IntentRouter:
             (re.compile(r"^send\s+whatsapp\s+message\s+to\s+(.+)$", re.IGNORECASE), "communication.whatsapp_prepare", "text"),
             (re.compile(r"^send\s+(?:an\s+)?email\s+to\s+(.+)$", re.IGNORECASE), "communication.email_prepare", "text"),
 
-            # Productivity & Math
+            # Productivity, Tasks, Reminders, Notes, and Planning
             (re.compile(r"^calculate\s+(.+)$", re.IGNORECASE), "productivity.calculate", "expression"),
             (re.compile(r"^remind\s+me\s+(?:to\s+)?(.+)$", re.IGNORECASE), "productivity.add_reminder", "title"),
             (re.compile(r"^(?:show|list)\s+reminders$", re.IGNORECASE), "productivity.list_reminders", ""),
+            (re.compile(r"^reschedule\s+reminder\s+(\d+)\s+(?:to\s+)?(.+)$", re.IGNORECASE), "productivity.reschedule_reminder", ("reminder_id", "new_remind_at")),
+            (re.compile(r"^cancel\s+reminder\s+(\d+)$", re.IGNORECASE), "productivity.cancel_reminder", "reminder_id"),
+            (re.compile(r"^delete\s+reminder\s+(\d+)$", re.IGNORECASE), "productivity.delete_reminder", "reminder_id"),
+            (re.compile(r"^(?:add|create)\s+task\s+(.+)$", re.IGNORECASE), "productivity.create_task", "title"),
+            (re.compile(r"^(?:show|list)\s+tasks$", re.IGNORECASE), "productivity.list_tasks", ""),
+            (re.compile(r"^complete\s+task\s+(\d+)$", re.IGNORECASE), "productivity.complete_task", "task_id"),
+            (re.compile(r"^delete\s+task\s+(\d+)$", re.IGNORECASE), "productivity.delete_task", "task_id"),
+            (re.compile(r"^(?:save|take|add)\s+note\s+([^\:\-]+)(?::|\s*-\s*)(.+)$", re.IGNORECASE), "productivity.save_note", ("title", "content")),
+            (re.compile(r"^(?:show|list)\s+notes$", re.IGNORECASE), "productivity.list_notes", ""),
+            (re.compile(r"^search\s+notes\s+(?:for\s+)?(.+)$", re.IGNORECASE), "productivity.search_notes", "query"),
+            (re.compile(r"^delete\s+note\s+(\d+)$", re.IGNORECASE), "productivity.delete_note", "note_id"),
+            (re.compile(r"^(?:daily\s+plan|morning\s+briefing|today'?s\s+agenda)$", re.IGNORECASE), "productivity.get_daily_plan", ""),
             (re.compile(r"^start\s+stopwatch$", re.IGNORECASE), "productivity.start_stopwatch", ""),
             (re.compile(r"^stop\s+stopwatch$", re.IGNORECASE), "productivity.stop_stopwatch", ""),
 
@@ -225,15 +237,16 @@ class IntentRouter:
             max_retries=1,
         )
 
-    def execute_route(
+    def execute_route_result(
         self,
         route_res: RouteResult,
         confirmation_token: Optional[str] = None,
         user_confirmed: bool = False,
-    ) -> str:
-        """Execute the tool resolved by the route through the central ExecutionEngine."""
+    ) -> ToolResult:
+        """Execute the tool resolved by the route through the central ExecutionEngine, returning typed ToolResult."""
         if not route_res.matched or not route_res.tool_name:
-            return route_res.direct_response or "Could not determine action."
+            msg = route_res.direct_response or "Could not determine action."
+            return ToolResult(status="FAILED", message=msg, error="UnmatchedRoute")
 
         from execution.engine import get_execution_engine
         from execution.request import TaskRequest
@@ -246,7 +259,20 @@ class IntentRouter:
         )
 
         engine = get_execution_engine()
-        result = engine.execute(request)
+        return engine.execute(request)
+
+    def execute_route(
+        self,
+        route_res: RouteResult,
+        confirmation_token: Optional[str] = None,
+        user_confirmed: bool = False,
+    ) -> str:
+        """Execute the tool resolved by the route through the central ExecutionEngine."""
+        result = self.execute_route_result(
+            route_res,
+            confirmation_token=confirmation_token,
+            user_confirmed=user_confirmed,
+        )
 
         if result.status == "NEED_CONFIRM":
             token = result.data.get("token") or "pending"

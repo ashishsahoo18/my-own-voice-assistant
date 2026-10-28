@@ -130,6 +130,26 @@ class ConfirmationManager:
         )
         return False, "Unrecognized confirmation response. Action cancelled for safety."
 
+    def invalidate_token(self, token: str, reason: str = "User cancelled") -> bool:
+        """Explicitly invalidate a specific confirmation token."""
+        clean_token = token.strip()
+        req = self._pending_tokens.pop(clean_token, None)
+        if not req:
+            return False
+
+        req.is_consumed = True
+        self._consumed_tokens.add(clean_token)
+
+        audit = get_audit_logger()
+        audit.record_event(
+            event_type="CONFIRMATION_DENIED",
+            action=req.action,
+            risk_level=req.risk_level,
+            status="CANCELLED_BY_USER",
+            details={"token": clean_token, "reason": reason},
+        )
+        return True
+
     def invalidate_all(self, reason: str = "Kill switch activated") -> int:
         """Invalidate all pending tokens immediately."""
         count = len(self._pending_tokens)
