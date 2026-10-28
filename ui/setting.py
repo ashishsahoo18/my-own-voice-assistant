@@ -1,22 +1,25 @@
-"""Settings windows for AYRA AI."""
+"""Settings window for OLIVER 2.0."""
 
 from __future__ import annotations
 
 import tkinter as tk
+from typing import Optional
 
 import customtkinter as ctk
 
+from core.config import OliverConfig, get_config
 from voice.language import VoiceLanguage
 from voice.voice_manager import VoiceManager
 
 
 class VoiceSettingsWindow(ctk.CTkToplevel):
-    """Premium settings window for voice preferences."""
+    """Cockpit settings window for voice and assistant preferences."""
 
-    def __init__(self, voice_manager: VoiceManager) -> None:
+    def __init__(self, voice_manager: VoiceManager, config: Optional[OliverConfig] = None) -> None:
         super().__init__()
 
-        self.title("AYRA AI Settings")
+        self.config: OliverConfig = config or get_config()
+        self.title("OLIVER 2.0 Settings")
         self.geometry("560x640")
         self.minsize(520, 600)
         self.configure(fg_color="#070b14")
@@ -41,7 +44,7 @@ class VoiceSettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             header,
-            text="ASHISH AI Settings",
+            text="OLIVER 2.0 Settings",
             font=("Segoe UI", 26, "bold"),
             text_color="#f8fbff",
             anchor="w",
@@ -49,7 +52,7 @@ class VoiceSettingsWindow(ctk.CTkToplevel):
 
         ctk.CTkLabel(
             header,
-            text="Voice, wake word, language, and speech behavior",
+            text="Voice, wake word, language, and cockpit behavior",
             font=("Segoe UI", 12),
             text_color="#8ea4c8",
             anchor="w",
@@ -88,7 +91,7 @@ class VoiceSettingsWindow(ctk.CTkToplevel):
             self._load_voice_names(),
         )
 
-        self.wake_word = self._add_entry(body, 6, "Wake Word", "hey ayra")
+        self.wake_word = self._add_entry(body, 6, "Wake Word", "hey oliver")
 
         self.speed_var = ctk.IntVar(value=170)
         self.speed_label_var = ctk.StringVar(value="170")
@@ -342,7 +345,7 @@ class VoiceSettingsWindow(ctk.CTkToplevel):
 
     def test_voice(self) -> None:
         """Speak a test line with current saved engine."""
-        self.voice_manager.speak("Hello Ashish, I am AYRA. Voice settings are ready.")
+        self.voice_manager.speak("Hello, I am OLIVER. Voice settings are ready.")
 
     def save_settings(self) -> None:
         """Save settings to VoiceManager."""
@@ -355,9 +358,13 @@ class VoiceSettingsWindow(ctk.CTkToplevel):
             auto_send_voice=bool(self.auto_send_voice.get()),
             wake_word_enabled=bool(self.wake_word_enabled.get()),
             language=self._language_code_from_label(self.language_var.get()),
-            wake_word=self.wake_word.get().strip() or "hey ayra",
+            wake_word=self.wake_word.get().strip() or "hey oliver",
             speech_rate=int(self.speed_var.get()),
             volume=float(self.volume_var.get()),
             voice_id=selected_voice_id,
         )
         self.destroy()
+
+
+# Backward-compatibility alias
+OliverSettingsWindow = VoiceSettingsWindow

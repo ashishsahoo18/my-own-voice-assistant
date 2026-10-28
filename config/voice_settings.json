@@ -2,11 +2,12 @@
   "voice_enabled": true,
   "auto_speaking": true,
   "auto_send_voice": true,
-  "voice_id": "",
-  "speech_rate": 168,
+  "voice_id": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_ZIRA_11.0",
+  "speech_rate": 300,
   "volume": 1.0,
   "language": "en",
   "wake_word": "hey Ashish",
   "wake_word_enabled": true,
-  "push_to_talk_enabled": true
+  "push_to_talk_enabled": true,
+  "fallback_external_allowed": true
 }

@@ -191,12 +191,12 @@ class SystemCommands:
         return f"Created file at {file_path}."
 
     def calculate(self, expression: str) -> str:
-        """Evaluate a simple math expression."""
-        try:
-            result = eval(expression, {"__builtins__": {}}, {})
-            return f"Result: {result}"
-        except Exception as exc:
-            return f"Calculation error: {exc}"
+        """Evaluate a simple math expression safely without eval()."""
+        from commands.calculator import Calculator
+        res = Calculator().evaluate(expression)
+        if res.startswith("Error:"):
+            return f"Calculation error: {res[6:].strip()}"
+        return f"Result: {res}"
 
     def volume_up(self) -> str:
         """Increase system volume if NirCmd is installed."""
@@ -317,12 +317,8 @@ class SystemCommands:
                 subprocess.Popen([target], shell=False)
                 return f"Opened {display_name}."
             except Exception:
-                try:
-                    os.startfile(target)
-                    return f"Opened {display_name}."
-                except Exception:
-                    subprocess.Popen(f'start "" "{target}"', shell=True)
-                    return f"Opened {display_name}."
+                os.startfile(target)
+                return f"Opened {display_name}."
         except Exception as exc:
             return f"Could not open {display_name}: {exc}"
 
@@ -332,9 +328,10 @@ class SystemCommands:
         success_message: str,
         error_prefix: str,
     ) -> str:
-        """Run a trusted Windows shell command."""
+        """Run a trusted Windows system command using argument lists (shell=False)."""
         try:
-            subprocess.run(command, shell=True, check=False)
+            cmd_args = command.split()
+            subprocess.run(cmd_args, shell=False, check=False)
             return success_message
         except Exception as exc:
             return f"{error_prefix}: {exc}"

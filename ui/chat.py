@@ -1,4 +1,4 @@
-"""Futuristic HUD Command Console Panel for ASHISH AI."""
+"""Futuristic HUD Command Console Panel for OLIVER 2.0."""
 
 from __future__ import annotations
 
@@ -11,14 +11,27 @@ import customtkinter as ctk
 
 from ai.assistant import AshishAssistant
 from database.chat_db import ChatStore
+from ui.event_bridge import UIEventQueue
 from voice.voice_manager import VoiceManager
 
 
 StateCallback = Callable[[str], None]
 
 
+STATUS_CONFIG = {
+    "VERIFIED": {"color": "#10B981", "border": "#065F46", "label": "VERIFIED"},
+    "UNVERIFIED": {"color": "#F59E0B", "border": "#78350F", "label": "UNVERIFIED"},
+    "FAILED": {"color": "#EF4444", "border": "#7F1D1D", "label": "FAILED"},
+    "DENIED": {"color": "#991B1B", "border": "#4C0519", "label": "DENIED"},
+    "CANCELLED": {"color": "#64748B", "border": "#334155", "label": "CANCELLED"},
+    "TIMEOUT": {"color": "#EA580C", "border": "#7C2D12", "label": "TIMEOUT"},
+    "NEED_CONFIRM": {"color": "#D97706", "border": "#78350F", "label": "NEED CONFIRM"},
+    "SUCCESS": {"color": "#10B981", "border": "#065F46", "label": "VERIFIED"},
+}
+
+
 class CommandConsoleEntry(ctk.CTkFrame):
-    """Futuristic HUD console log entry for executed assistant commands."""
+    """Futuristic HUD console log entry for executed assistant commands with truthful status badges."""
 
     def __init__(
         self,
@@ -28,17 +41,24 @@ class CommandConsoleEntry(ctk.CTkFrame):
         intent: str,
         action_desc: str,
         status: str = "SUCCESS",
+        evidence: Optional[str] = None,
     ) -> None:
+        cfg = STATUS_CONFIG.get(status.upper(), {
+            "color": "#10B981" if status == "SUCCESS" else "#F59E0B",
+            "border": "#065F46" if status == "SUCCESS" else "#78350F",
+            "label": status.upper(),
+        })
+
         super().__init__(
             parent,
             fg_color="#091224",
             border_width=1,
-            border_color="#182c4f" if status == "SUCCESS" else "#5c2424",
+            border_color=cfg["border"],
             corner_radius=12,
         )
         self.pack(fill="x", pady=6, padx=8)
 
-        # Header row: Timestamp + Intent Tag + Status
+        # Header row: Timestamp + Intent Tag + Status Badge
         header = ctk.CTkFrame(self, fg_color="transparent")
         header.pack(fill="x", padx=12, pady=(10, 4))
 
@@ -50,12 +70,15 @@ class CommandConsoleEntry(ctk.CTkFrame):
         ).pack(side="left")
 
         intent_color = "#00d2ff"
-        if intent == "WINDOWS_APP" or intent == "WINDOWS_COMMAND":
+        normalized_intent = intent.upper()
+        if normalized_intent in ("WINDOWS_APP", "WINDOWS_COMMAND", "WINDOWS"):
             intent_color = "#38f7a6"
-        elif intent == "YOUTUBE":
+        elif normalized_intent in ("YOUTUBE", "MEDIA"):
             intent_color = "#ff3b5c"
-        elif intent == "PRODUCTIVITY" or intent == "FILE_COMMAND":
+        elif normalized_intent in ("PRODUCTIVITY", "FILE_COMMAND", "FILES"):
             intent_color = "#ffb703"
+        elif normalized_intent in ("COMMUNICATION", "WHATSAPP", "EMAIL"):
+            intent_color = "#34d399"
 
         ctk.CTkLabel(
             header,
@@ -64,12 +87,11 @@ class CommandConsoleEntry(ctk.CTkFrame):
             text_color=intent_color,
         ).pack(side="left", padx=10)
 
-        status_color = "#38f7a6" if status == "SUCCESS" else "#ff4444"
         ctk.CTkLabel(
             header,
-            text=status,
+            text=cfg["label"],
             font=("Segoe UI", 10, "bold"),
-            text_color=status_color,
+            text_color=cfg["color"],
         ).pack(side="right")
 
         # Command Text
@@ -95,7 +117,7 @@ class CommandConsoleEntry(ctk.CTkFrame):
 
         # Action / Result Text
         act_row = ctk.CTkFrame(self, fg_color="transparent")
-        act_row.pack(fill="x", padx=12, pady=(2, 10))
+        act_row.pack(fill="x", padx=12, pady=(2, 6 if evidence else 10))
 
         ctk.CTkLabel(
             act_row,
@@ -114,9 +136,31 @@ class CommandConsoleEntry(ctk.CTkFrame):
             justify="left",
         ).pack(side="left", fill="x", expand=True)
 
+        # Evidence display if present
+        if evidence:
+            ev_row = ctk.CTkFrame(self, fg_color="transparent")
+            ev_row.pack(fill="x", padx=12, pady=(0, 10))
+
+            ctk.CTkLabel(
+                ev_row,
+                text="EVIDENCE:",
+                font=("Segoe UI", 9, "bold"),
+                text_color="#64748b",
+            ).pack(side="left", padx=(0, 6))
+
+            ctk.CTkLabel(
+                ev_row,
+                text=str(evidence),
+                font=("Segoe UI", 9),
+                text_color="#94a3b8",
+                anchor="w",
+                wraplength=380,
+                justify="left",
+            ).pack(side="left", fill="x", expand=True)
+
 
 class CommandConsolePanel(ctk.CTkFrame):
-    """Futuristic Command Console Panel for ASHISH AI."""
+    """Futuristic Command Console Panel for OLIVER 2.0."""
 
     def __init__(
         self,
@@ -126,6 +170,7 @@ class CommandConsolePanel(ctk.CTkFrame):
         voice_manager: Optional[VoiceManager] = None,
         on_state_change: Optional[StateCallback] = None,
         request_confirmation: Optional[Callable] = None,
+        event_bridge: Optional[UIEventQueue] = None,
     ) -> None:
         super().__init__(
             master,
@@ -141,10 +186,28 @@ class CommandConsolePanel(ctk.CTkFrame):
         self.on_state_change = on_state_change
         self.request_confirmation = request_confirmation
         self.session_id = self.store.get_or_create_session()
+        self._owns_event_bridge = event_bridge is None
+        self.event_bridge = event_bridge or UIEventQueue()
+
+        # If bridge is owned by this panel and not yet bound, bind this panel
+        if self._owns_event_bridge and self.event_bridge._root is None:
+            self.event_bridge.bind_root(self)
+            self.event_bridge.start_polling()
 
         self._request_in_flight = False
+        self._confirmation_in_flight = False
         self.status_var = ctk.StringVar(value="READY")
         self.transcript_var = ctk.StringVar(value="Awaiting command...")
+
+        # Register voice state listener for observable HUD state changes via bridge
+        try:
+            self.voice_manager.add_state_listener(
+                lambda st, detail: self.event_bridge.post(
+                    self._set_state, st.value if hasattr(st, "value") else str(st)
+                )
+            )
+        except Exception:
+            pass
 
         self._build_ui()
         self._load_history()
@@ -326,6 +389,17 @@ class CommandConsolePanel(ctk.CTkFrame):
         if not command or self._request_in_flight:
             return
 
+        from security.kill_switch import get_kill_switch
+        if get_kill_switch().is_active:
+            self._log_console_entry(
+                command,
+                "SECURITY",
+                "Command rejected: Emergency Kill Switch is engaged.",
+                "DENIED",
+                None,
+            )
+            return
+
         self.entry.delete(0, tk.END)
         self.transcript_var.set(command)
         self._process_command(command)
@@ -334,93 +408,6 @@ class CommandConsolePanel(ctk.CTkFrame):
         self._request_in_flight = True
         self._set_state("PROCESSING")
 
-        # 1. Dangerous command requirement check (shutdown, restart, delete file)
-        is_dangerous, confirm_msg = self.assistant.is_dangerous_command(command)
-        if is_dangerous and self.request_confirmation:
-            self._set_state("SPEAKING")
-            threading.Thread(
-                target=self.voice_manager.speak,
-                args=(confirm_msg,),
-                daemon=True,
-            ).start()
-
-            self.request_confirmation(
-                title="System Security Confirmation",
-                message=confirm_msg,
-                on_confirm=lambda: self._execute_confirmed(command, "DANGEROUS_COMMAND"),
-                on_cancel=lambda: self._cancel_confirmed(command, "DANGEROUS_COMMAND", "Command cancelled by user."),
-                confirm_text="CONFIRM",
-                accent_color="#ff3b30",
-            )
-            return
-
-        # 2. WhatsApp confirmation requirement check
-        lowered = command.lower().strip()
-        if "whatsapp" in lowered or (lowered.startswith("message ") and "saying" in lowered):
-            prep_res = self.assistant.whatsapp.prepare_whatsapp_command(command)
-            if prep_res.startswith("CONFIRMATION_REQUIRED:WHATSAPP:"):
-                payload = prep_res.split(":", 2)[-1]
-                parts = payload.split("|")
-                display_name, phone_number, message_text = parts[0], parts[1], parts[2]
-
-                msg_display = f"Send WhatsApp message?\n\nTo: {display_name} (+{phone_number})\nMessage: \"{message_text}\""
-
-                if self.request_confirmation:
-                    self._set_state("SPEAKING")
-                    threading.Thread(
-                        target=self.voice_manager.speak,
-                        args=(f"Send WhatsApp message to {display_name}?",),
-                        daemon=True,
-                    ).start()
-
-                    self.request_confirmation(
-                        title="Confirm WhatsApp Message",
-                        message=msg_display,
-                        on_confirm=lambda: self._execute_confirmed(prep_res, "WHATSAPP"),
-                        on_cancel=lambda: self._cancel_confirmed(command, "WHATSAPP", "WhatsApp message was not sent."),
-                        confirm_text="SEND",
-                        accent_color="#25D366",
-                    )
-                    return
-            elif prep_res:
-                self._log_console_entry(command, "WHATSAPP", prep_res, "FAILED")
-                self._speak_confirmation(prep_res)
-                self._request_in_flight = False
-                return
-
-        # 3. Email confirmation requirement check
-        if "email" in lowered or lowered.startswith("mail "):
-            prep_res = self.assistant.email_service.prepare_email_command(command)
-            if prep_res.startswith("CONFIRMATION_REQUIRED:EMAIL:"):
-                payload = prep_res.split(":", 2)[-1]
-                parts = payload.split("|")
-                display_name, email_addr, subject_text, message_text = parts[0], parts[1], parts[2], parts[3]
-
-                msg_display = f"Send Email?\n\nTo: {display_name} ({email_addr})\nSubject: {subject_text}\nMessage: \"{message_text}\""
-
-                if self.request_confirmation:
-                    self._set_state("SPEAKING")
-                    threading.Thread(
-                        target=self.voice_manager.speak,
-                        args=(f"Send email to {display_name}?",),
-                        daemon=True,
-                    ).start()
-
-                    self.request_confirmation(
-                        title="Confirm Email",
-                        message=msg_display,
-                        on_confirm=lambda: self._execute_confirmed(prep_res, "EMAIL"),
-                        on_cancel=lambda: self._cancel_confirmed(command, "EMAIL", "Email was not sent."),
-                        confirm_text="SEND",
-                        accent_color="#ea4335",
-                    )
-                    return
-            elif prep_res:
-                self._log_console_entry(command, "EMAIL", prep_res, "FAILED")
-                self._speak_confirmation(prep_res)
-                self._request_in_flight = False
-                return
-
         threading.Thread(
             target=self._run_assistant_command,
             args=(command,),
@@ -428,46 +415,219 @@ class CommandConsolePanel(ctk.CTkFrame):
         ).start()
 
     def _execute_confirmed(self, payload: str, intent_override: str = "COMMAND") -> None:
-        self._set_state("EXECUTING")
-        res = self.assistant.execute_confirmed_command(payload)
-        status = "SUCCESS" if ("Sent" in res or "sent" in res or "Executed" in res or "Opened" in res or "created" in res.lower()) else ("OPENED — MESSAGE NOT SENT" if "OPENED" in res else "FAILED")
-        self.after(0, self._log_console_entry, payload, intent_override, res, status)
-        self._speak_confirmation(res)
-        self._request_in_flight = False
+        """Backward compatibility shim."""
+        self._handle_confirmation_confirm(payload, intent_override, None, payload)
 
     def _cancel_confirmed(self, command: str, intent_override: str = "COMMAND", cancel_msg: str = "Command cancelled by user.") -> None:
-        self._set_state("READY")
-        self.after(0, self._log_console_entry, command, intent_override, cancel_msg, "CANCELLED")
-        self._speak_confirmation(cancel_msg)
-        self._request_in_flight = False
+        """Backward compatibility shim."""
+        self._handle_confirmation_cancel(command, intent_override, None)
 
     def _run_assistant_command(self, command: str) -> None:
         try:
-            self._set_state("EXECUTING")
-            reply = self.assistant.handle(command)
+            self.event_bridge.post(self._set_state, "EXECUTING")
+
+            if hasattr(self.assistant, "handle_result"):
+                res = self.assistant.handle_result(command)
+            else:
+                reply = self.assistant.handle(command)
+                from skills.base import ToolResult
+                res = ToolResult(status="UNVERIFIED", message=reply)
+
             intent = getattr(self.assistant, "intent_type", "COMMAND")
 
-            status = "SUCCESS"
-            if reply.startswith("YOUTUBE") and "FAILED" in reply:
-                status = "FAILED"
-            elif "OPENED" in reply and "NOT SENT" in reply:
-                status = "OPENED — MESSAGE NOT SENT"
-            elif "ERROR" in reply or "unavailable" in reply:
-                status = "FAILED"
+            # Check if action requires explicit confirmation
+            if getattr(res, "status", "") == "NEED_CONFIRM":
+                token = res.data.get("token") if res.data else None
+                preview = res.message
+                payload = {
+                    "token": token,
+                    "tool_name": res.data.get("tool_name", "") if res.data else "",
+                    "arguments": res.data.get("arguments", {}) if res.data else {},
+                    "command": command,
+                    "summary": preview,
+                }
+                if res.data and "payload" in res.data:
+                    payload["payload"] = res.data["payload"]
 
-            self.after(0, self._log_console_entry, command, intent, reply, status)
-            self._speak_confirmation(reply)
+                self.event_bridge.post(
+                    self._log_console_entry,
+                    command,
+                    intent,
+                    f"Awaiting confirmation: {preview}",
+                    "NEED_CONFIRM",
+                    None,
+                )
+                self.event_bridge.post(self._set_state, "SPEAKING")
+                self.voice_manager.speak(f"Confirmation required. {preview}")
+
+                self.event_bridge.post(
+                    self._show_confirmation_dialog,
+                    command,
+                    intent,
+                    preview,
+                    token,
+                    payload,
+                )
+                return
+
+            status = getattr(res, "status", "UNVERIFIED")
+            msg = getattr(res, "message", str(res))
+            evidence_val = getattr(res, "evidence", None)
+            if not evidence_val and getattr(res, "data", None):
+                evidence_val = res.data.get("evidence")
+            evidence_str = str(evidence_val) if evidence_val else None
+
+            self.event_bridge.post(
+                self._log_console_entry,
+                command,
+                intent,
+                msg,
+                status,
+                evidence_str,
+            )
+            self._speak_confirmation(msg)
+            self.event_bridge.post(self._set_state, "READY")
         except Exception as exc:
-            print("ASHISH AI EXECUTION ERROR:", repr(exc))
-            self.after(0, self._log_console_entry, command, "ERROR", f"Error: {exc}", "FAILED")
-            self._set_state("ERROR")
+            print("OLIVER 2.0 EXECUTION ERROR:", repr(exc))
+            self.event_bridge.post(
+                self._log_console_entry,
+                command,
+                "ERROR",
+                f"Execution error: {exc}",
+                "FAILED",
+                None,
+            )
+            self.event_bridge.post(self._set_state, "ERROR")
         finally:
             self._request_in_flight = False
 
+    def _show_confirmation_dialog(
+        self,
+        command: str,
+        intent: str,
+        preview: str,
+        token: Optional[str],
+        payload: Any,
+    ) -> None:
+        """Present confirmation modal dialog on Tkinter main thread."""
+        if not self.request_confirmation:
+            self._log_console_entry(
+                command,
+                intent,
+                "No confirmation modal handler available. Action cancelled.",
+                "CANCELLED",
+                None,
+            )
+            self._set_state("READY")
+            self._request_in_flight = False
+            return
+
+        self._confirmation_in_flight = False
+
+        def on_confirm():
+            if self._confirmation_in_flight:
+                return
+            self._confirmation_in_flight = True
+            threading.Thread(
+                target=self._handle_confirmation_confirm,
+                args=(command, intent, token, payload),
+                daemon=True,
+            ).start()
+
+        def on_cancel():
+            if self._confirmation_in_flight:
+                return
+            self._confirmation_in_flight = True
+            threading.Thread(
+                target=self._handle_confirmation_cancel,
+                args=(command, intent, token),
+                daemon=True,
+            ).start()
+
+        self.request_confirmation(
+            title="System Security Confirmation",
+            message=preview,
+            on_confirm=on_confirm,
+            on_cancel=on_cancel,
+            confirm_text="CONFIRM",
+            accent_color="#ff3b30",
+        )
+
+    def _handle_confirmation_confirm(
+        self,
+        command: str,
+        intent: str,
+        token: Optional[str],
+        payload: Any,
+    ) -> None:
+        try:
+            self.event_bridge.post(self._set_state, "EXECUTING")
+            if hasattr(self.assistant, "execute_confirmed_command_result"):
+                res = self.assistant.execute_confirmed_command_result(payload, confirmation_token=token)
+            else:
+                raw_res = self.assistant.execute_confirmed_command(str(payload))
+                from skills.base import ToolResult
+                res = ToolResult(status="UNVERIFIED", message=raw_res)
+
+            status = getattr(res, "status", "UNVERIFIED")
+            msg = getattr(res, "message", str(res))
+            evidence_val = getattr(res, "evidence", None)
+            if not evidence_val and getattr(res, "data", None):
+                evidence_val = res.data.get("evidence")
+            evidence_str = str(evidence_val) if evidence_val else None
+
+            self.event_bridge.post(
+                self._log_console_entry,
+                command,
+                intent,
+                msg,
+                status,
+                evidence_str,
+            )
+            self._speak_confirmation(msg)
+            self.event_bridge.post(self._set_state, "READY")
+        except Exception as exc:
+            self.event_bridge.post(
+                self._log_console_entry,
+                command,
+                intent,
+                f"Confirmation execution failed: {exc}",
+                "FAILED",
+                None,
+            )
+            self.event_bridge.post(self._set_state, "ERROR")
+        finally:
+            self._confirmation_in_flight = False
+            self._request_in_flight = False
+
+    def _handle_confirmation_cancel(
+        self,
+        command: str,
+        intent: str,
+        token: Optional[str],
+    ) -> None:
+        try:
+            if token:
+                from security.confirmation import get_confirmation_manager
+                get_confirmation_manager().invalidate_token(token, reason="User cancelled in UI")
+
+            cancel_msg = "Action cancelled by user."
+            self.event_bridge.post(
+                self._log_console_entry,
+                command,
+                intent,
+                cancel_msg,
+                "CANCELLED",
+                None,
+            )
+            self._speak_confirmation(cancel_msg)
+            self.event_bridge.post(self._set_state, "READY")
+        finally:
+            self._confirmation_in_flight = False
+            self._request_in_flight = False
+
     def _speak_confirmation(self, reply: str) -> None:
-        self._set_state("SPEAKING")
         self.voice_manager.speak(reply)
-        self._set_state("READY")
 
     def _log_console_entry(
         self,
@@ -475,6 +635,7 @@ class CommandConsolePanel(ctk.CTkFrame):
         intent: str,
         action_desc: str,
         status: str = "SUCCESS",
+        evidence: Optional[str] = None,
     ) -> None:
         now_str = datetime.now().strftime("%I:%M:%S %p")
         CommandConsoleEntry(
@@ -484,30 +645,88 @@ class CommandConsolePanel(ctk.CTkFrame):
             intent,
             action_desc,
             status,
+            evidence=evidence,
         )
         self._scroll_to_bottom()
 
     def start_voice_input(self) -> None:
+        from security.kill_switch import get_kill_switch
+        if get_kill_switch().is_active:
+            return
+
+        # Safe barge-in: stop any active speech immediately
+        self.voice_manager.barge_in()
+
         if self._request_in_flight:
             return
 
         self._set_state("LISTENING")
         threading.Thread(target=self._handle_voice_input, daemon=True).start()
 
+    def handle_kill_switch_activated(self) -> None:
+        """Disable inputs and log emergency stop activation."""
+        try:
+            self.entry.configure(state="disabled")
+        except Exception:
+            pass
+        if hasattr(self, "mic_btn"):
+            try:
+                self.mic_btn.configure(state="disabled")
+            except Exception:
+                pass
+        if hasattr(self, "send_btn"):
+            try:
+                self.send_btn.configure(state="disabled")
+            except Exception:
+                pass
+        self._set_state("KILLED")
+        self._log_console_entry(
+            "EMERGENCY STOP",
+            "SECURITY",
+            "Emergency Kill Switch engaged. All executions and speech halted.",
+            "CANCELLED",
+            None,
+        )
+
+    def handle_kill_switch_deactivated(self) -> None:
+        """Re-enable inputs and log emergency stop reset."""
+        try:
+            self.entry.configure(state="normal")
+        except Exception:
+            pass
+        if hasattr(self, "mic_btn"):
+            try:
+                self.mic_btn.configure(state="normal")
+            except Exception:
+                pass
+        if hasattr(self, "send_btn"):
+            try:
+                self.send_btn.configure(state="normal")
+            except Exception:
+                pass
+        self._set_state("READY")
+        self._log_console_entry(
+            "RESET KILL SWITCH",
+            "SECURITY",
+            "Emergency Kill Switch disengaged. Normal operations restored.",
+            "VERIFIED",
+            None,
+        )
+
     def _handle_voice_input(self) -> None:
         try:
             text = self.voice_manager.listen_once()
         except Exception:
-            self.after(0, self._set_state, "READY")
+            self.event_bridge.post(self._set_state, "READY")
             return
 
         if not text:
-            self.after(0, self.transcript_var.set, "No speech recognized.")
-            self.after(0, self._set_state, "READY")
+            self.event_bridge.post(self.transcript_var.set, "No speech recognized.")
+            self.event_bridge.post(self._set_state, "READY")
             return
 
-        self.after(0, self.transcript_var.set, text)
-        self.after(0, self._process_command, text)
+        self.event_bridge.post(self.transcript_var.set, text)
+        self.event_bridge.post(self._process_command, text)
 
     def clear_console(self) -> None:
         for child in self.console_feed.winfo_children():
@@ -517,7 +736,10 @@ class CommandConsolePanel(ctk.CTkFrame):
     def _set_state(self, state: str) -> None:
         self.status_var.set(state)
         if self.on_state_change:
-            self.after(0, self.on_state_change, state)
+            try:
+                self.on_state_change(state)
+            except Exception:
+                pass
 
     def _scroll_to_bottom(self) -> None:
         self.update_idletasks()
@@ -533,6 +755,16 @@ class CommandConsolePanel(ctk.CTkFrame):
     def _load_history(self) -> None:
         pass
 
+    def destroy(self) -> None:
+        """Destroy panel, shutting down event bridge only if this panel owns it."""
+        if self.__dict__.get("_owns_event_bridge", False) and hasattr(self, "event_bridge"):
+            try:
+                self.event_bridge.shutdown()
+            except Exception:
+                pass
+        super().destroy()
 
-# Alias for backward compatibility
+
+# Backward-compatibility aliases
+OliverConsolePanel = CommandConsolePanel
 ChatPanel = CommandConsolePanel

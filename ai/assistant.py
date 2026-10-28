@@ -55,6 +55,10 @@ class AshishAssistant:
         self.ai_service = AIService()
         self.router = CommandRouter()
 
+        from core.config import get_config
+        self.config = get_config()
+        self.oliver_router = None
+
         self.used_google_search = False
         self.last_folder_path: Path | None = None
         self.last_file_path: Path | None = None
@@ -119,6 +123,18 @@ class AshishAssistant:
             return "Please say or type a command so I can help."
 
         lowered = text.lower()
+
+        # OLIVER Mode Routing Branch
+        if getattr(self, "config", None) and getattr(self.config, "router_mode", "legacy") == "oliver":
+            if self.oliver_router is None:
+                from router.router import IntentRouter
+                self.oliver_router = IntentRouter()
+            route_res = self.oliver_router.route(text)
+            if route_res.matched:
+                if route_res.requires_confirmation:
+                    return f"CONFIRMATION_REQUIRED:{route_res.tool_name}:{text}"
+                return self.oliver_router.execute_route(route_res)
+
         intent = self.determine_intent(text)
         self.intent_type = intent
 
@@ -141,8 +157,81 @@ class AshishAssistant:
         # AI Q&A Fallback (does not open browser/ChatGPT)
         return self.ai_service.ask(text)
 
-    def execute_confirmed_command(self, command_payload: str) -> str:
-        """Execute a WhatsApp, Email, or dangerous command after user confirmation."""
+    def handle_result(self, message: str, confirmation_token: Optional[str] = None) -> Any:
+        """Route and execute request through the central ExecutionEngine, returning typed ToolResult."""
+        from router.router import IntentRouter
+        from skills.base import ToolResult
+
+        text = message.strip()
+        if not text:
+            return ToolResult(status="FAILED", message="Please say or type a command so I can help.")
+
+        if self.oliver_router is None:
+            self.oliver_router = IntentRouter()
+
+        route_res = self.oliver_router.route(text)
+        if route_res.matched:
+            tool_res = self.oliver_router.execute_route_result(
+                route_res,
+                confirmation_token=confirmation_token,
+            )
+            self.intent_type = route_res.tool_name.split(".")[0].upper()
+            return tool_res
+
+        # If not deterministically matched by router, fall back to handle(message)
+        legacy_reply = self.handle(message)
+        if legacy_reply.startswith("CONFIRMATION_REQUIRED:"):
+            from security.confirmation import get_confirmation_manager
+            conf_mgr = get_confirmation_manager()
+            summary = legacy_reply.split(":", 1)[1]
+            if summary.startswith("WHATSAPP:"):
+                parts = summary.split(":", 1)[1].split("|")
+                summary = f"Send WhatsApp message to '{parts[0]}' (+{parts[1]}): \"{parts[2]}\""
+            elif summary.startswith("EMAIL:"):
+                parts = summary.split(":", 1)[1].split("|")
+                summary = f"Send email to '{parts[0]}' ({parts[1]}) with subject '{parts[2]}': \"{parts[3]}\""
+
+            req = conf_mgr.create_request(
+                action="legacy_action",
+                risk_level=2,
+                summary=summary,
+                details={"legacy_payload": legacy_reply},
+            )
+            return ToolResult(
+                status="NEED_CONFIRM",
+                message=summary,
+                data={"token": req.token, "payload": legacy_reply, "tool_name": "legacy_action"},
+            )
+
+        status = "UNVERIFIED"
+        if legacy_reply.startswith("Error") or "failed" in legacy_reply.lower() or "not available" in legacy_reply.lower():
+            status = "FAILED"
+        return ToolResult(
+            status=status,
+            message=legacy_reply,
+            data={"raw_response": legacy_reply},
+        )
+
+    def execute_confirmed_command_result(self, command_payload: str, confirmation_token: Optional[str] = None) -> Any:
+        """Execute a confirmed action returning typed ToolResult."""
+        from execution.engine import get_execution_engine
+        from execution.request import TaskRequest
+        from skills.base import ToolResult
+
+        engine = get_execution_engine()
+        if isinstance(command_payload, dict):
+            tool_name = command_payload.get("tool_name", "")
+            args = command_payload.get("arguments", {})
+            token = confirmation_token or command_payload.get("token")
+            return engine.execute(
+                TaskRequest(
+                    tool_name=tool_name,
+                    arguments=args,
+                    confirmation_token=token,
+                    user_confirmed=True,
+                )
+            )
+
         text = command_payload.strip()
 
         if text.startswith("CONFIRMATION_REQUIRED:WHATSAPP:") or text.startswith("WHATSAPP:"):
@@ -150,24 +239,52 @@ class AshishAssistant:
             parts = payload.split("|")
             if len(parts) >= 3:
                 recipient, phone, message = parts[0], parts[1], parts[2]
-                return self.whatsapp.send_message(phone, message)
+                return engine.execute(
+                    TaskRequest(
+                        tool_name="communication.whatsapp_send",
+                        arguments={"phone": phone, "message": message, "recipient": recipient},
+                        confirmation_token=confirmation_token,
+                        user_confirmed=True,
+                    )
+                )
 
         if text.startswith("CONFIRMATION_REQUIRED:EMAIL:") or text.startswith("EMAIL:"):
             payload = text.split(":", 2)[-1]
             parts = payload.split("|")
             if len(parts) >= 4:
                 recipient, email, subject, message = parts[0], parts[1], parts[2], parts[3]
-                return self.email_service.send_email(email, subject, message)
+                return engine.execute(
+                    TaskRequest(
+                        tool_name="communication.email_send",
+                        arguments={"email": email, "subject": subject, "message": message, "recipient": recipient},
+                        confirmation_token=confirmation_token,
+                        user_confirmed=True,
+                    )
+                )
 
         lowered = text.lower()
         if "shutdown" in lowered:
-            return self.system.shutdown()
+            return engine.execute(TaskRequest(tool_name="windows.shutdown", confirmation_token=confirmation_token, user_confirmed=True))
         if "restart" in lowered:
-            return self.system.restart()
+            return engine.execute(TaskRequest(tool_name="windows.restart", confirmation_token=confirmation_token, user_confirmed=True))
         if "delete file" in lowered:
-            return self.system.create_file("deleted_placeholder.txt")
+            return engine.execute(
+                TaskRequest(
+                    tool_name="files.delete_file",
+                    arguments={"path": "deleted_placeholder.txt"},
+                    confirmation_token=confirmation_token,
+                    user_confirmed=True,
+                )
+            )
 
-        return "Command executed."
+        return ToolResult(status="UNVERIFIED", message="Command executed.")
+
+    def execute_confirmed_command(self, command_payload: str) -> str:
+        """Execute a WhatsApp, Email, or dangerous command through the central ExecutionEngine."""
+        res = self.execute_confirmed_command_result(command_payload)
+        if hasattr(res, "status") and res.status in ("DENIED", "CANCELLED"):
+            return f"Policy denied: {res.message}"
+        return getattr(res, "message", str(res))
 
     def _handle_time_date_commands(self, text: str, lowered: str) -> str | None:
         time_triggers = ["current time", "time is it", "what time", "time now", "tell me the time", "clock"]
@@ -184,6 +301,111 @@ class AshishAssistant:
         return None
 
     def _handle_commands(self, text: str, lowered: str) -> str | None:
+        if lowered.startswith("run task ") or lowered.startswith("plan and execute "):
+            goal = re.sub(r"^(?:run\s+task|plan\s+and\s+execute)\s+", "", text, flags=re.IGNORECASE).strip()
+            from agent.executor import get_agent_task_loop
+            report = get_agent_task_loop().run(goal=goal)
+            return report.summary
+
+        if lowered.startswith("research ") or lowered.startswith("search web for ") or lowered.startswith("web research "):
+            q = re.sub(r"^(?:research|search\s+web\s+for|web\s+research)\s+", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="research.search", arguments={"query": q}))
+            return res.message
+
+        if (
+            lowered.startswith("explain code")
+            or lowered.startswith("explain this code")
+            or re.match(r"^explain\s+this\s+[a-zA-Z0-9\+#]+\s+code", lowered)
+        ):
+            code_text = re.sub(r"^(?:explain\s+(?:this\s+)?[a-zA-Z0-9\+#]*\s*code(?::|\s+)?)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.explain", arguments={"code": code_text}))
+            return res.message
+
+        if (
+            lowered.startswith("help me fix this error")
+            or lowered.startswith("help me fix error")
+            or lowered.startswith("diagnose error")
+            or lowered.startswith("diagnose this error")
+        ):
+            err_text = re.sub(r"^(?:help\s+me\s+fix\s+(?:this\s+)?error|diagnose\s+(?:this\s+)?error)(?::|\s+)?", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.diagnose_error", arguments={"error_log": err_text}))
+            return res.message
+
+        if lowered.startswith("review this code") or lowered.startswith("review code") or "review this function" in lowered:
+            code_text = re.sub(r"^(?:review\s+(?:this\s+)?(?:code|function)(?:\s+for\s+bugs)?(?::|\s+)?)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.review", arguments={"code": code_text}))
+            return res.message
+
+        if lowered.startswith("generate code for ") or re.match(r"^generate\s+(?:a\s+|an\s+)?[a-zA-Z0-9\+#]+\s+code\s+for", lowered):
+            m = re.match(r"^generate\s+(?:(?:a\s+|an\s+)?([a-zA-Z0-9\+#]+)\s+code\s+for\s+|code\s+for\s+)(.+)$", text, re.IGNORECASE)
+            lang = m.group(1).strip() if m and m.group(1) else "Python"
+            p = m.group(2).strip() if m and m.group(2) else text
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.generate", arguments={"prompt": p, "language": lang}))
+            return res.message
+
+        if lowered.startswith("give me a hint") or lowered.startswith("give hint"):
+            hint_topic = re.sub(r"^(?:give\s+(?:me\s+)?a?\s*hint(?:\s+for|\s+before\s+showing\s+the\s+solution)?(?::|\s+)?)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="coding.learning_hint", arguments={"problem_or_code": hint_topic, "level": 1}))
+            return res.message
+
+        # Documents & Knowledge commands
+        if lowered.startswith("index document ") or lowered.startswith("index file "):
+            fp = re.sub(r"^(?:index\s+(?:document|file)\s+)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.index_file", arguments={"file_path": fp}))
+            return res.message
+
+        if lowered.startswith("search knowledge ") or lowered.startswith("search document ") or lowered.startswith("search documents "):
+            q = re.sub(r"^(?:search\s+(?:knowledge|documents?|in\s+documents?)\s+(?:for\s+)?)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.search", arguments={"query": q}))
+            return res.message
+
+        if lowered.startswith("summarize document ") or lowered.startswith("summarize file "):
+            target = re.sub(r"^(?:summarize\s+(?:document|file)\s+)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.summarize_document", arguments={"file_path_or_id": target}))
+            return res.message
+
+        if lowered.startswith("ask document "):
+            q = re.sub(r"^(?:ask\s+document\s+)", "", text, flags=re.IGNORECASE).strip()
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.ask_document", arguments={"question": q}))
+            return res.message
+
+        if lowered in ("list documents", "list indexed documents"):
+            from execution.engine import get_execution_engine
+            from execution.request import TaskRequest
+            eng = get_execution_engine()
+            res = eng.execute(TaskRequest(tool_name="knowledge.list_documents", arguments={}))
+            return res.message
+
         time_date_res = self._handle_time_date_commands(text, lowered)
         if time_date_res:
             return time_date_res
@@ -308,6 +530,38 @@ class AshishAssistant:
                 self.memory_manager.add_note("Note", note_text)
                 return "Note saved successfully."
             return "What note should I save?"
+
+        # Phase 5: Hybrid Memory Engine Controls
+        from memory.manager import get_memory_engine
+        engine = get_memory_engine()
+
+        if re.match(r"^what\s+do\s+you\s+remember(?:\s+about\s+me)?\??$", lowered):
+            return engine.what_do_you_remember()
+
+        if re.match(r"^(?:please\s+)?remember\s+(?:that\s+)?(.+)$", lowered):
+            fact_match = re.match(r"^(?:please\s+)?remember\s+(?:that\s+)?(.+)$", text, re.IGNORECASE)
+            fact = fact_match.group(1).strip() if fact_match else text
+            success, msg = engine.remember(fact)
+            return f"Remembered: {fact}" if success else msg
+
+        if lowered == "forget this memory" or re.match(r"^forget\s+(.+)$", lowered):
+            if lowered == "forget this memory":
+                return engine.forget("")
+            forget_match = re.match(r"^forget\s+(.+)$", text, re.IGNORECASE)
+            target = forget_match.group(1).strip() if forget_match else ""
+            return engine.forget(target)
+
+        if lowered in {"clear session memory", "clear conversation memory"}:
+            return engine.clear_session_memory("default")
+
+        if lowered in {"memory status", "memory settings", "memory info"}:
+            st = engine.status()
+            return (
+                f"OLIVER Memory Engine Active (WAL mode)\n"
+                f"• Long-Term Memories: {st['total_semantic_memories']}\n"
+                f"• Total Sessions: {st['total_sessions']}\n"
+                f"• Total Stored Messages: {st['total_messages']}"
+            )
 
         self._learn_from_text(text)
         return None

@@ -1,16 +1,43 @@
-﻿# Environment variables
+# Environment variables
 .env
 .env.*
+!.env.example
 
-# Python cache
+# Python cache and compiled files
 __pycache__/
-**/__pycache__/
+**/**/__pycache__/
 *.py[cod]
+*$py.class
 
 # Virtual environments
 venv/
 .venv/
 env/
 
-# VS Code
+# IDE and editors
 .vscode/
+.idea/
+
+# User data and databases (DO NOT COMMIT USER DATA)
+database/*.db
+database/*.sqlite*
+database/*.sqlite3
+*.db
+contacts.csv
+
+# Backups
+backups/
+
+# Runtime logs
+logs/
+*.log
+
+# Runtime captures and screenshots
+screenshots/
+captures/
+ayra_workspace/
+
+# Testing and coverage caches
+.pytest_cache/
+.coverage
+htmlcov/
