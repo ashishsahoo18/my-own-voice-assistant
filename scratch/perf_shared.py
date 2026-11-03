@@ -24,7 +24,7 @@ def _load() -> None:
     """Load existing records from disk (if any)."""
     if _file_path.is_file():
         try:
-            with file_path.open("r", encoding="utf-8") as f:
+            with _file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)
                 if isinstance(data, dict):
                     perf_data.update(data)
@@ -36,11 +36,11 @@ def _save() -> None:
     """Persist ``perf_data`` to disk atomically."""
     with _lock:
         try:
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            tmp_path = file_path.with_suffix('.tmp')
+            _file_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = _file_path.with_suffix('.tmp')
             with tmp_path.open('w', encoding='utf-8') as f:
                 json.dump(perf_data, f, indent=2, sort_keys=True)
-            tmp_path.replace(file_path)
+            tmp_path.replace(_file_path)
         except Exception:
             pass
 
