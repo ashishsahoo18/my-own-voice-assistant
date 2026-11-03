@@ -96,7 +96,89 @@ class AIService:
 
         return True, active_url, selected_model, model_names, ""
 
-    def ask(self, prompt: str) -> str:
+    def ask(self, prompt: str, request_id: Optional[str] = None) -> str:
+        """Generate local AI response using Ollama REST API.
+
+        Records Ollama request latency if request_id is provided.
+        """
+        clean_prompt = prompt.strip()
+        if not clean_prompt:
+            return "Please ask a question."
+
+        # Greeting check
+        lowered = clean_prompt.lower()
+        if lowered in {"hello ashish ai", "hi ashish ai", "hey ashish ai", "hello", "hi", "hey"}:
+            return "Hello! I am ASHISH AI, your personal desktop assistant. How can I help you today?"
+
+        is_healthy, active_url, selected_model, available_models, error_msg = self.check_health()
+        if not is_healthy:
+            return error_msg
+
+        chat_endpoint = f"{active_url}/api/chat"
+        generate_endpoint = f"{active_url}/api/generate"
+
+        system_prompt = (
+            "You are ASHISH AI, a helpful, intelligent personal desktop assistant. "
+            "Provide clear, accurate, natural, and concise answers suitable for a voice HUD."
+        )
+
+        # Measure latency
+        start_time = time.perf_counter()
+        try:
+            payload = {
+                "model": selected_model,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": clean_prompt},
+                ],
+                "stream": False,
+                "options": {
+                    "temperature": 0.7,
+                    "num_predict": 300,
+                },
+            }
+
+            resp = requests.post(chat_endpoint, json=payload, timeout=self.timeout)
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            if request_id:
+                from scratch.perf_shared import record
+                record(request_id, "ollama_latency_ms", latency_ms)
+
+            if resp.status_code == 200:
+                data = resp.json()
+                if "message" in data and "content" in data["message"]:
+                    return data["message"]["content"].strip()
+                if "response" in data:
+                    return data["response"].strip()
+
+            # Fallback to /api/generate
+            gen_payload = {
+                "model": selected_model,
+                "prompt": f"{system_prompt}\n\nQuestion: {clean_prompt}\nAnswer:",
+                "stream": False,
+                "options": {"temperature": 0.7, "num_predict": 300},
+            }
+            gen_resp = requests.post(generate_endpoint, json=gen_payload, timeout=self.timeout)
+            latency_ms = (time.perf_counter() - start_time) * 1000
+            if request_id:
+                record(request_id, "ollama_latency_ms", latency_ms)
+            if gen_resp.status_code == 200:
+                gen_data = gen_resp.json()
+                if "response" in gen_data:
+                    return gen_data["response"].strip()
+
+            return f"Local AI model '{selected_model}' returned an error (HTTP {resp.status_code})."
+        except Exception as exc:
+            self.logger.warning("Ollama query exception: %s", exc)
+            if (
+                (requests and isinstance(exc, requests.exceptions.Timeout))
+                or isinstance(exc, TimeoutError)
+                or "timed out" in str(exc).lower()
+                or "timeout" in str(exc).lower()
+            ):
+                return "Local AI is taking longer than expected. Please try again."
+            return f"Local AI query failed: {exc}"
+
         """Generate local AI response using Ollama REST API.
 
         Does NOT require any cloud API keys.

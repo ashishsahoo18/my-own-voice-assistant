@@ -28,7 +28,28 @@ ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
 
 
+from core.config import get_config
+cfg = get_config()
+
 class ConfirmationModal(ctk.CTkToplevel):
+    """Modal dialog for dangerous commands, WhatsApp, and Email confirmation."""
+
+    def __init__(
+        self,
+        parent: ctk.CTk,
+        title: str,
+        message: str,
+        on_confirm,
+        on_cancel,
+        confirm_text: str = "CONFIRM",
+        accent_color: str = cfg.theme_config.accent,
+    ) -> None:
+        super().__init__(parent)
+        self.title(title)
+        self.geometry("520x280")
+        self.resizable(False, False)
+        self.configure(fg_color=cfg.theme_config.surface)
+
     """Modal dialog for dangerous commands, WhatsApp, and Email confirmation."""
 
     def __init__(

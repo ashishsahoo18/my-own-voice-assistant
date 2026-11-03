@@ -22,7 +22,7 @@ perf_data: Dict[str, Dict[str, Any]] = {}
 
 def _load() -> None:
     """Load existing records from disk (if any)."""
-    if file_path.is_file():
+    if _file_path.is_file():
         try:
             with file_path.open("r", encoding="utf-8") as f:
                 data = json.load(f)

@@ -116,7 +116,48 @@ class AshishAssistant:
             return True, f"Are you sure you want to delete file '{text}'?"
         return False, ""
 
-    def handle(self, message: str) -> str:
+    def handle(self, message: str, request_id: Optional[str] = None) -> str:
+        self.used_google_search = False
+        text = message.strip()
+        if not text:
+            return "Please say or type a command so I can help."
+
+        lowered = text.lower()
+
+        # OLIVER Mode Routing Branch
+        if getattr(self, "config", None) and getattr(self.config, "router_mode", "legacy") == "oliver":
+            if self.oliver_router is None:
+                from router.router import IntentRouter
+                self.oliver_router = IntentRouter()
+            route_res = self.oliver_router.route(text)
+            if route_res.matched:
+                if route_res.requires_confirmation:
+                    return f"CONFIRMATION_REQUIRED:{route_res.tool_name}:{text}"
+                return self.oliver_router.execute_route(route_res)
+
+        intent = self.determine_intent(text)
+        self.intent_type = intent
+
+        # Dangerous command confirmation check
+        is_dangerous, confirm_msg = self.is_dangerous_command(text)
+        if is_dangerous:
+            return f"CONFIRMATION_REQUIRED:{confirm_msg}"
+
+        try:
+            command_response = self._handle_commands(text, lowered)
+            if command_response:
+                return command_response
+        except Exception as exc:
+            print("ASHISH AI COMMAND ERROR:", repr(exc))
+
+        memory_response = self._handle_memory_commands(text, lowered)
+        if memory_response:
+            return memory_response
+
+        # AI Q&A Fallback (does not open browser/ChatGPT)
+        # Pass request_id to AI service for latency telemetry
+        return self.ai_service.ask(text, request_id=request_id)
+
         self.used_google_search = False
         text = message.strip()
         if not text:
