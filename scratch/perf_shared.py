@@ -51,6 +51,24 @@ def new_request_id() -> str:
     """Generate a fresh UUID for a new request."""
     return str(uuid.uuid4())
 
+# Thread‑local storage for the current request ID (used by UI code).
+_current_request = threading.local()
+
+def set_current_request_id(request_id: str) -> None:
+    """Store *request_id* for the current thread.
+
+    This allows downstream code (e.g., UI callbacks) to retrieve the ID without
+    passing it explicitly through every function call.
+    """
+    _current_request.request_id = request_id
+
+def get_current_request_id() -> str | None:
+    """Retrieve the request ID stored for this thread, or ``None`` if not set."""
+    return getattr(_current_request, "request_id", None)
+
+    """Generate a fresh UUID for a new request."""
+    return str(uuid.uuid4())
+
 def record(request_id: str, metric: str, value: Any) -> None:
     """Record a metric for ``request_id`` and immediately persist.
 
