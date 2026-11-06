@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from core.config import OliverConfig, get_config
@@ -25,9 +26,15 @@ class ProductivityService:
         db: Optional[UnifiedDatabase] = None,
         speaker: Optional[Any] = None,
         start_scheduler: bool = True,
+        db_path: Optional[str | Path] = None,
     ) -> None:
         self.config = config if config is not None else get_config()
-        self.db = db if db is not None else get_unified_db()
+        if db is not None:
+            self.db = db
+        elif db_path is not None:
+            self.db = UnifiedDatabase(db_path=db_path)
+        else:
+            self.db = get_unified_db()
         self.store = ProductivityStore(self.db)
         self.speaker = speaker
         self._dispatch_listeners: list[Callable[[ReminderItem], None]] = []
@@ -164,3 +171,15 @@ def get_productivity_service() -> ProductivityService:
     if _global_service is None:
         _global_service = ProductivityService()
     return _global_service
+
+
+def set_productivity_service(service: Optional[ProductivityService]) -> None:
+    """Set the global ProductivityService singleton (for test dependency injection)."""
+    global _global_service
+    _global_service = service
+
+
+def reset_productivity_service() -> None:
+    """Reset the global ProductivityService singleton."""
+    global _global_service
+    _global_service = None
