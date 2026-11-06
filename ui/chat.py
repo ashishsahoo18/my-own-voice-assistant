@@ -136,6 +136,44 @@ class CommandConsolePanel(ctk.CTkFrame):
 
     # (The rest of the class definitions remain unchanged.)
 
+    # ------------------------------------------------------------------
+    # QUICK‑COMMAND BAR (added to fix missing method)
+    # ------------------------------------------------------------------
+    def _build_quick_commands_bar(self) -> None:
+        """
+        Build the row of five quick‑command buttons that appear beneath the
+        transcript box. Each button inserts a command prefix into the input
+        entry and focuses the entry for immediate editing or submission.
+        """
+        bar = ctk.CTkFrame(self, fg_color="#0b172a")
+        bar.grid(row=3, column=0, sticky="ew", padx=16, pady=(0, 8))
+        # equally distribute columns for the five buttons
+        for col in range(5):
+            bar.grid_columnconfigure(col, weight=1)
+
+        def _make_btn(label: str, insert_text: str) -> ctk.CTkButton:
+            return ctk.CTkButton(
+                bar,
+                text=label,
+                width=0,
+                font=("Segoe UI", 10, "bold"),
+                fg_color="#101c33",
+                hover_color="#1e2b4a",
+                command=lambda: (
+                    self._input_entry.delete(0, tk.END),
+                    self._input_entry.insert(0, insert_text),
+                    self._input_entry.focus_set(),
+                ),
+            )
+
+        # Create and place the five buttons
+        _make_btn("Note", "!note ").grid(row=0, column=0, padx=4, pady=4, sticky="ew")
+        _make_btn("Remind", "!remind ").grid(row=0, column=1, padx=4, pady=4, sticky="ew")
+        _make_btn("Search", "!search ").grid(row=0, column=2, padx=4, pady=4, sticky="ew")
+        _make_btn("Image", "!image ").grid(row=0, column=3, padx=4, pady=4, sticky="ew")
+        _make_btn("Files", "!files ").grid(row=0, column=4, padx=4, pady=4, sticky="ew")
+
+
 # Backward‑compatibility aliases
 OliverConsolePanel = CommandConsolePanel
 ChatPanel = CommandConsolePanel
