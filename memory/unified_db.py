@@ -458,3 +458,40 @@ def get_unified_db() -> UnifiedDatabase:
     if _default_unified_db is None:
         _default_unified_db = UnifiedDatabase()
     return _default_unified_db
+
+
+def set_unified_db(db: Optional[UnifiedDatabase]) -> None:
+    """Set the global unified database singleton (used for isolated testing)."""
+    global _default_unified_db
+    _default_unified_db = db
+
+
+def reset_unified_db() -> None:
+    """Reset the global unified database singleton to None."""
+    global _default_unified_db
+    _default_unified_db = None
+
+
+@contextmanager
+def isolated_test_db() -> Generator[tuple[UnifiedDatabase, Path], None, None]:
+    """Context manager creating a temporary, isolated SQLite database file with all schemas applied.
+    
+    Guarantees that test operations never access or modify production databases,
+    supports multi-threading with persistent temporary file, and ensures reliable cleanup.
+    """
+    import tempfile
+    import shutil
+    temp_dir = tempfile.mkdtemp(prefix="oliver_test_db_")
+    temp_db_path = Path(temp_dir) / "test_oliver.db"
+    db = UnifiedDatabase(db_path=temp_db_path)
+    old_db = _default_unified_db
+    set_unified_db(db)
+    try:
+        yield db, temp_db_path
+    finally:
+        set_unified_db(old_db)
+        try:
+            db.close()
+        except Exception:
+            pass
+        shutil.rmtree(temp_dir, ignore_errors=True)
