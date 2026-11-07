@@ -58,9 +58,13 @@ class IntentRouter:
 
     def _build_deterministic_rules(self) -> None:
         """Compile regexes and trigger lookup table for registered skills."""
-        self.rules: list[tuple[re.Pattern, str, str]] = [
+        self.rules: list[tuple[re.Pattern, str, str | tuple[str, ...]]] = [
+            # Explicit Portfolio Shortcut (top priority for portfolio commands)
+            (re.compile(r"^(?:open|go to|visit|launch|show)\s+(?:the\s+)?((?:my\s+)?portfolio)(?:\s+website)?$", re.IGNORECASE), "browser.open_site", "site_name"),
+
             # Windows apps
             (re.compile(r"^(?:open|launch|start|run)\s+(?:the\s+)?(notepad|calculator|calc|paint|explorer|vs\s*code|vscode|chrome|edge|firefox|cmd|command prompt|powershell|settings|task manager|control panel)$", re.IGNORECASE), "windows.open_app", "app_name"),
+
             # System workstation state
             (re.compile(r"^lock\s+(?:the\s+)?(?:computer|pc|workstation)$", re.IGNORECASE), "windows.lock_computer", ""),
             (re.compile(r"^restart\s+(?:windows\s+)?explorer$", re.IGNORECASE), "windows.restart_explorer", ""),
@@ -71,21 +75,26 @@ class IntentRouter:
             (re.compile(r"^restart(?:\s+(?:the\s+)?(?:computer|pc))?$", re.IGNORECASE), "windows.restart", ""),
             (re.compile(r"^sleep(?:\s+(?:the\s+)?(?:computer|pc))?$", re.IGNORECASE), "windows.sleep", ""),
 
-            # Browser & Search
+            # Browser & Navigation
             (re.compile(r"^(?:open|browse\s+to|navigate\s+to)\s+(?:web\s*page\s+|url\s+|page\s+)?(https?://\S+)$", re.IGNORECASE), "browser.open_page", "url"),
             (re.compile(r"^summarize\s+(?:web\s*page\s+|url\s+|page\s+)(https?://\S+)$", re.IGNORECASE), "browser.summarize_page", "url"),
             (re.compile(r"^summarize\s+(?:the\s+)?(?:current\s+)?(?:web\s*page|page)$", re.IGNORECASE), "browser.summarize_page", ""),
             (re.compile(r"^extract\s+(?:content|text)\s+from\s+(?:web\s*page\s+|url\s+|page\s+)?(https?://\S+)$", re.IGNORECASE), "browser.extract_content", "url"),
             (re.compile(r"^close\s+(?:the\s+)?browser(?:\s+session)?$", re.IGNORECASE), "browser.close_session", ""),
-            (re.compile(r"^(?:open|go to)\s+(?:the\s+)?(google|youtube|github|linkedin|flipkart|instagram|whatsapp|chatgpt)$", re.IGNORECASE), "browser.open_site", "site_name"),
+
+            # Universal Website & Service opening in Firefox
+            (re.compile(r"^(?:open|go to|visit)\s+(?:the\s+)?(portfolio|my portfolio|portfolio website|my portfolio website|google|youtube|github|linkedin|flipkart|instagram|whatsapp|chatgpt|amazon|wikipedia|reddit|facebook|twitter|stackoverflow|gmail|drive|gemini|netflix|hotstar|spotify|coursera|udemy|kaggle|leetcode|geeksforgeeks|gfg)(?:\s+website|\s+site)?$", re.IGNORECASE), "browser.open_site", "site_name"),
+            (re.compile(r"^(?:open|go to|visit)\s+(?:the\s+)?([a-zA-Z0-9\-]+(?:\.[a-zA-Z0-9\-]+)+(?:/\S*)?)$", re.IGNORECASE), "browser.open_site", "site_name"),
+
+            # YouTube commands
+            (re.compile(r"^(?:search\s+(?:for\s+)?(.+?)\s+on\s+youtube|search\s+youtube\s+(?:for\s+)?(.+)|youtube\s+search\s+(.+))$", re.IGNORECASE), "youtube.search", "query"),
+            (re.compile(r"^play\s+(.+)$", re.IGNORECASE), "youtube.play", "query"),
+
+            # Specific Search Handlers
             (re.compile(r"^search\s+(?:knowledge|documents?|in\s+documents?)\s+(?:for\s+)?(.+)$", re.IGNORECASE), "knowledge.search", "query"),
             (re.compile(r"^search\s+github\s+(?:for\s+)?(.+)$", re.IGNORECASE), "browser.search_github", "query"),
             (re.compile(r"^search\s+(?:stack\s*overflow|stackoverflow)\s+(?:for\s+)?(.+)$", re.IGNORECASE), "browser.search_stackoverflow", "query"),
-            (re.compile(r"^search\s+(?:google\s+(?:for\s+)?)?(.+)$", re.IGNORECASE), "browser.search_google", "query"),
-
-            # YouTube
-            (re.compile(r"^play\s+(.+)$", re.IGNORECASE), "youtube.play", "query"),
-            (re.compile(r"^search\s+youtube\s+(?:for\s+)?(.+)$", re.IGNORECASE), "youtube.search", "query"),
+            (re.compile(r"^search\s+google\s+(?:for\s+)?(.+)$", re.IGNORECASE), "browser.search_google", "query"),
 
             # Files
             (re.compile(r"^create\s+folder\s+(.+)$", re.IGNORECASE), "files.create_folder", "path"),
@@ -116,8 +125,9 @@ class IntentRouter:
             (re.compile(r"^start\s+stopwatch$", re.IGNORECASE), "productivity.start_stopwatch", ""),
             (re.compile(r"^stop\s+stopwatch$", re.IGNORECASE), "productivity.stop_stopwatch", ""),
 
-            # Info
+            # Info (Weather and News)
             (re.compile(r"^weather(?:\s+in\s+(.+))?$", re.IGNORECASE), "info.weather", "location"),
+            (re.compile(r"^(?:give\s+me\s+)?(?:today'?s\s+)?(?:technology\s+|tech\s+)?news(?:\s+(?:about|on|in)\s+(.+))?$", re.IGNORECASE), "info.news", "category"),
             (re.compile(r"^news(?:\s+(.+))?$", re.IGNORECASE), "info.news", "category"),
 
             # Memory Controls
@@ -139,7 +149,7 @@ class IntentRouter:
 
             # Coding Assistant
             (re.compile(r"^(?:explain\s+(?:this\s+)?code|explain\s+code)(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.explain", "code"),
-            (re.compile(r"^(?:explain\s+this\s+([a-zA-Z0-9\+#]+)\s+code)(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.explain", ("language", "code")),
+            (re.compile(r"^(?:explain\s+this\s+([a-zA-Z0-9\+#]+)\s+(?:program|code))(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.explain", ("language", "code")),
             (re.compile(r"^(?:help\s+(?:me\s+)?fix\s+(?:this\s+)?error|diagnose\s+(?:this\s+)?error)(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.diagnose_error", "error_log"),
             (re.compile(r"^(?:help\s+(?:me\s+)?fix\s+this\s+([a-zA-Z0-9\+#]+)\s+error)(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.diagnose_error", ("language", "error_log")),
             (re.compile(r"^(?:review\s+(?:this\s+)?code|review\s+this\s+function)(?:\s+for\s+bugs)?(?::|\s+)?([\s\S]*)$", re.IGNORECASE), "coding.review", "code"),
@@ -156,38 +166,60 @@ class IntentRouter:
             (re.compile(r"^(?:delete\s+(?:document\s+)?index\s+(?:for\s+)?)(.+)$", re.IGNORECASE), "knowledge.delete_document_index", "doc_id_or_name"),
         ]
 
+    def _normalize_text(self, text: str) -> str:
+        """Strip trailing punctuation and common conversational filler phrases."""
+        clean = (text or "").strip()
+        # Remove trailing sentence punctuation
+        clean = re.sub(r"[\.!\?,;]+$", "", clean).strip()
+        # Strip leading politeness/conversational openers
+        clean = re.sub(r"^(?:can you\s+(?:please\s+)?|could you\s+(?:please\s+)?|please\s+|i want to\s+|would you\s+)", "", clean, flags=re.IGNORECASE).strip()
+        # Strip trailing politeness closers
+        clean = re.sub(r"(?:\s+for me|\s+please)$", "", clean, flags=re.IGNORECASE).strip()
+        return clean
+
     def route(self, text: str) -> RouteResult:
         """Route user input to a tool specification."""
         clean_text = text.strip()
         if not clean_text:
             return RouteResult(matched=False, direct_response="Please provide a command.")
 
-        # 1. Deterministic Rule Matching First
+        norm_text = self._normalize_text(clean_text)
+
+        # 1. Deterministic Rule Matching First (check clean_text then norm_text)
         for pattern, tool_name, arg_key in self.rules:
-            match = pattern.match(clean_text)
-            if match:
-                args = {}
-                if isinstance(arg_key, (list, tuple)) and match.groups():
-                    for idx, k in enumerate(arg_key):
-                        if idx < len(match.groups()) and k:
-                            args[k] = match.group(idx + 1).strip() if match.group(idx + 1) else ""
-                elif arg_key and match.groups():
-                    val = match.group(1)
-                    args[arg_key] = val.strip() if val else ""
-                elif arg_key == "text":
-                    args["text"] = clean_text
+            for candidate in (clean_text, norm_text):
+                match = pattern.match(candidate)
+                if match:
+                    args = {}
+                    if isinstance(arg_key, (list, tuple)) and match.groups():
+                        for idx, k in enumerate(arg_key):
+                            if idx < len(match.groups()) and k:
+                                args[k] = match.group(idx + 1).strip() if match.group(idx + 1) else ""
+                    elif arg_key and match.groups():
+                        # Get first non-None group
+                        non_none = [g for g in match.groups() if g is not None]
+                        val = non_none[0] if non_none else ""
+                        args[arg_key] = val.strip() if val else ""
+                    elif arg_key == "text":
+                        args["text"] = clean_text
+                    elif arg_key == "site_name" and not args.get("site_name"):
+                        args["site_name"] = candidate
 
-                tool = self.registry.get_tool(tool_name)
-                return RouteResult(
-                    matched=True,
-                    tool_name=tool_name,
-                    arguments=args,
-                    confidence=1.0,
-                    requires_confirmation=tool.requires_confirmation if tool else False,
-                    risk_level=tool.risk_level.value if tool else 0,
-                )
+                    # Special category handling for news
+                    if tool_name == "info.news" and "technology" in candidate.lower() and not args.get("category"):
+                        args["category"] = "technology"
 
-        # 2. Schema-Constrained LLM Intent Classification Fallback
+                    tool = self.registry.get_tool(tool_name)
+                    return RouteResult(
+                        matched=True,
+                        tool_name=tool_name,
+                        arguments=args,
+                        confidence=1.0,
+                        requires_confirmation=tool.requires_confirmation if tool else False,
+                        risk_level=tool.risk_level.value if tool else 0,
+                    )
+
+        # 2. Schema-Constrained LLM Intent Classification Fallback (only for short command-like phrases)
         if self._is_potential_tool_command(clean_text):
             classification = self._classify_with_llm(clean_text)
             if classification and classification.confidence >= 0.7:
@@ -202,7 +234,7 @@ class IntentRouter:
                         risk_level=tool.risk_level.value,
                     )
 
-        # 3. Default AI Q&A Fallback
+        # 3. Default AI Q&A Fallback (programming, science, definitions, general conversation)
         return RouteResult(
             matched=True,
             tool_name="ai.ask",
@@ -214,10 +246,14 @@ class IntentRouter:
     def _is_potential_tool_command(self, text: str) -> bool:
         """Check if query looks like a command rather than general knowledge question."""
         lowered = text.lower()
-        question_words = ["what is", "explain", "why is", "who is", "how does", "tell me about"]
+        question_words = [
+            "what is", "explain", "why is", "who is", "how does", "tell me about",
+            "write a", "write an", "difference between", "how do i", "can you explain",
+            "what are", "teach me", "help me understand",
+        ]
         if any(lowered.startswith(w) for w in question_words):
             return False
-        return len(text.split()) <= 12
+        return len(text.split()) <= 8
 
     def _classify_with_llm(self, text: str) -> Optional[IntentClassification]:
         """Request structured intent classification from Ollama."""

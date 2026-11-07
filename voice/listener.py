@@ -32,8 +32,8 @@ class VoiceListener:
 
         self.recognizer = sr.Recognizer()
         self.recognizer.dynamic_energy_threshold = True
-        self.recognizer.pause_threshold = 0.8
-        self.recognizer.non_speaking_duration = 0.4
+        self.recognizer.pause_threshold = 1.0
+        self.recognizer.non_speaking_duration = 0.5
 
         self.capture = AudioCapture(logger=self.logger)
         self.vad = VoiceActivityDetector()
@@ -51,9 +51,9 @@ class VoiceListener:
 
     def listen_once(
         self,
-        timeout: int = 8,
-        phrase_time_limit: Optional[int] = 8,
-        silence_timeout: float = 0.8,
+        timeout: int = 10,
+        phrase_time_limit: Optional[int] = 15,
+        silence_timeout: float = 1.0,
         status_callback: Optional[StatusCallback] = None,
     ) -> str:
         """Capture speech once and return recognized text."""
@@ -87,6 +87,10 @@ class VoiceListener:
         try:
             result = self.stt_engine.transcribe(audio, language=self.language)
             self.last_result = result
+            # Reject extremely uncertain / low-confidence garbled acoustic matches
+            if result.confidence < 0.25 and result.text:
+                self.logger.warning("STT produced low-confidence transcript (%.2f): '%s'; ignoring", result.confidence, result.text)
+                return ""
             return result.text.strip()
         except Exception as exc:
             self._log_error("Speech recognition failed: %s", exc)

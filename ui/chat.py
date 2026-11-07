@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 import tkinter as tk
 from datetime import datetime
@@ -79,6 +80,8 @@ class CommandConsoleEntry(ctk.CTkFrame):
             intent_color = "#ffb703"
         elif normalized_intent in ("COMMUNICATION", "WHATSAPP", "EMAIL"):
             intent_color = "#34d399"
+        elif normalized_intent in ("AI", "LLM"):
+            intent_color = "#a78bfa"
 
         ctk.CTkLabel(
             header,
@@ -87,12 +90,13 @@ class CommandConsoleEntry(ctk.CTkFrame):
             text_color=intent_color,
         ).pack(side="left", padx=10)
 
-        ctk.CTkLabel(
+        self.status_badge = ctk.CTkLabel(
             header,
             text=cfg["label"],
             font=("Segoe UI", 10, "bold"),
             text_color=cfg["color"],
-        ).pack(side="right")
+        )
+        self.status_badge.pack(side="right")
 
         # Command Text
         cmd_row = ctk.CTkFrame(self, fg_color="transparent")
@@ -126,7 +130,7 @@ class CommandConsoleEntry(ctk.CTkFrame):
             text_color="#8da5cc",
         ).pack(side="left", padx=(0, 6))
 
-        ctk.CTkLabel(
+        self.action_label = ctk.CTkLabel(
             act_row,
             text=action_desc,
             font=("Segoe UI", 11),
@@ -134,7 +138,8 @@ class CommandConsoleEntry(ctk.CTkFrame):
             anchor="w",
             wraplength=380,
             justify="left",
-        ).pack(side="left", fill="x", expand=True)
+        )
+        self.action_label.pack(side="left", fill="x", expand=True)
 
         # Evidence display if present
         if evidence:
@@ -157,6 +162,26 @@ class CommandConsoleEntry(ctk.CTkFrame):
                 wraplength=380,
                 justify="left",
             ).pack(side="left", fill="x", expand=True)
+
+    def update_action_text(self, new_text: str) -> None:
+        """Update live streamed action text."""
+        try:
+            self.action_label.configure(text=new_text)
+        except Exception:
+            pass
+
+    def update_status(self, new_status: str) -> None:
+        """Update status label and border color."""
+        try:
+            cfg = STATUS_CONFIG.get(new_status.upper(), {
+                "color": "#10B981" if new_status == "SUCCESS" else "#F59E0B",
+                "border": "#065F46" if new_status == "SUCCESS" else "#78350F",
+                "label": new_status.upper(),
+            })
+            self.status_badge.configure(text=cfg["label"], text_color=cfg["color"])
+            self.configure(border_color=cfg["border"])
+        except Exception:
+            pass
 
 
 class CommandConsolePanel(ctk.CTkFrame):
@@ -196,6 +221,7 @@ class CommandConsolePanel(ctk.CTkFrame):
 
         self._request_in_flight = False
         self._confirmation_in_flight = False
+        self._voice_listening_in_flight = False
         self.status_var = ctk.StringVar(value="READY")
         self.transcript_var = ctk.StringVar(value="Awaiting command...")
 
@@ -403,6 +429,7 @@ class CommandConsolePanel(ctk.CTkFrame):
             target=self._run_assistant_command,
             args=(command,),
             daemon=True,
+            name="OliverAssistantCommandThread",
         ).start()
 
     def _execute_confirmed(self, payload: str, intent_override: str = "COMMAND") -> None:
@@ -416,6 +443,75 @@ class CommandConsolePanel(ctk.CTkFrame):
     def _run_assistant_command(self, command: str) -> None:
         try:
             self.event_bridge.post(self._set_state, "EXECUTING")
+
+            from security.kill_switch import get_kill_switch
+            if get_kill_switch().is_active:
+                self.event_bridge.post(
+                    self._log_console_entry,
+                    command,
+                    "SECURITY",
+                    "Execution halted: Emergency Kill Switch is engaged.",
+                    "DENIED",
+                    None,
+                )
+                self.event_bridge.post(self._set_state, "KILLED")
+                return
+
+            # Check if this command is an AI Q&A question that can stream directly
+            is_ai_streamable = False
+            if hasattr(self.assistant, "oliver_router") and self.assistant.oliver_router is not None:
+                route_peek = self.assistant.oliver_router.route(command)
+                if route_peek.matched and route_peek.tool_name == "ai.ask":
+                    is_ai_streamable = True
+            elif hasattr(self.assistant, "router") and hasattr(self.assistant.router, "_is_ai_question"):
+                if self.assistant.router._is_ai_question(command.lower()):
+                    is_ai_streamable = True
+
+            if is_ai_streamable and hasattr(self.assistant, "ai_service") and hasattr(self.assistant.ai_service, "ask_stream"):
+                entry_ref: list[Optional[CommandConsoleEntry]] = [None]
+                def _init_ai_entry():
+                    entry_ref[0] = self._log_console_entry(
+                        command,
+                        "AI",
+                        "Thinking...",
+                        "UNVERIFIED",
+                        None,
+                    )
+                self.event_bridge.post(_init_ai_entry)
+
+                accumulated: list[str] = []
+                spoken_idx = [0]
+
+                def on_token(token: str) -> None:
+                    if get_kill_switch().is_active:
+                        return
+                    accumulated.append(token)
+                    full_text = "".join(accumulated)
+                    if entry_ref[0] is not None:
+                        self.event_bridge.post(entry_ref[0].update_action_text, full_text)
+                        self.event_bridge.post(self._scroll_to_bottom)
+
+                    # Sentence-level streaming speech for low perceived latency
+                    unspoken = full_text[spoken_idx[0]:].strip()
+                    if re.search(r"[\.!?]\s*$", unspoken) and len(unspoken) > 15:
+                        self.voice_manager.speak(unspoken, wait=False)
+                        spoken_idx[0] = len(full_text)
+
+                reply_text = self.assistant.ai_service.ask_stream(command, on_token=on_token)
+                final_text = "".join(accumulated) or reply_text
+                status = "FAILED" if ("offline" in final_text.lower() or "failed" in final_text.lower()) else "VERIFIED"
+
+                tail = final_text[spoken_idx[0]:].strip()
+                if tail and not get_kill_switch().is_active:
+                    self.voice_manager.speak(tail, wait=False)
+
+                if entry_ref[0] is not None:
+                    self.event_bridge.post(entry_ref[0].update_action_text, final_text)
+                    self.event_bridge.post(entry_ref[0].update_status, status)
+                    self.event_bridge.post(self._scroll_to_bottom)
+
+                self.event_bridge.post(self._set_state, "READY")
+                return
 
             if hasattr(self.assistant, "handle_result"):
                 res = self.assistant.handle_result(command)
@@ -627,9 +723,9 @@ class CommandConsolePanel(ctk.CTkFrame):
         action_desc: str,
         status: str = "SUCCESS",
         evidence: Optional[str] = None,
-    ) -> None:
+    ) -> CommandConsoleEntry:
         now_str = datetime.now().strftime("%I:%M:%S %p")
-        CommandConsoleEntry(
+        entry = CommandConsoleEntry(
             self.console_feed,
             now_str,
             command,
@@ -639,6 +735,7 @@ class CommandConsolePanel(ctk.CTkFrame):
             evidence=evidence,
         )
         self._scroll_to_bottom()
+        return entry
 
     def start_voice_input(self) -> None:
         from security.kill_switch import get_kill_switch
@@ -648,11 +745,12 @@ class CommandConsolePanel(ctk.CTkFrame):
         # Safe barge-in: stop any active speech immediately
         self.voice_manager.barge_in()
 
-        if self._request_in_flight:
+        if self._request_in_flight or getattr(self, "_voice_listening_in_flight", False):
             return
 
+        self._voice_listening_in_flight = True
         self._set_state("LISTENING")
-        threading.Thread(target=self._handle_voice_input, daemon=True).start()
+        threading.Thread(target=self._handle_voice_input, daemon=True, name="OliverVoiceInputThread").start()
 
     def handle_kill_switch_activated(self) -> None:
         """Disable inputs and log emergency stop activation."""
@@ -706,13 +804,28 @@ class CommandConsolePanel(ctk.CTkFrame):
 
     def _handle_voice_input(self) -> None:
         try:
-            text = self.voice_manager.listen_once()
-        except Exception:
+            self.event_bridge.post(self.transcript_var.set, "Listening for speech...")
+
+            def on_status(st: str) -> None:
+                if st.lower() == "listening":
+                    self.event_bridge.post(self.transcript_var.set, "Listening through microphone...")
+                    self.event_bridge.post(self._set_state, "LISTENING")
+                elif st.lower() == "processing":
+                    self.event_bridge.post(self.transcript_var.set, "Processing recognized speech...")
+                    self.event_bridge.post(self._set_state, "PROCESSING")
+
+            text = self.voice_manager.listen_once(status_callback=on_status)
+        except Exception as exc:
+            print("Voice recognition error:", repr(exc))
+            self.event_bridge.post(self.transcript_var.set, "Microphone access error. Please check permissions.")
             self.event_bridge.post(self._set_state, "READY")
             return
+        finally:
+            self._voice_listening_in_flight = False
 
         if not text:
-            self.event_bridge.post(self.transcript_var.set, "No speech recognized.")
+            self.event_bridge.post(self.transcript_var.set, "Speech not understood. Please speak clearly.")
+            self.voice_manager.speak("I couldn't quite hear or understand that. Could you please repeat?")
             self.event_bridge.post(self._set_state, "READY")
             return
 

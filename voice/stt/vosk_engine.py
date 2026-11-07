@@ -124,12 +124,19 @@ class VoskSTTEngine(SpeechToTextEngine):
             result_data = json.loads(final_json)
             text = (result_data.get("text") or "").strip()
 
+            word_list = result_data.get("result", [])
+            if word_list and isinstance(word_list, list):
+                confs = [float(w.get("conf", 1.0)) for w in word_list if "conf" in w]
+                avg_confidence = sum(confs) / len(confs) if confs else (1.0 if text else 0.0)
+            else:
+                avg_confidence = 1.0 if text else 0.0
+
             latency = time.perf_counter() - start_time
-            self.logger.info("Vosk offline transcription completed in %.3fs: '%s'", latency, text)
+            self.logger.info("Vosk offline transcription completed in %.3fs (confidence=%.2f): '%s'", latency, avg_confidence, text)
 
             return TranscriptionResult(
                 text=text,
-                confidence=1.0 if text else 0.0,
+                confidence=avg_confidence,
                 engine=self.name,
                 is_offline=True,
                 latency_s=latency,

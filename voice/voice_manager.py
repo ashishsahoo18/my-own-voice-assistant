@@ -33,6 +33,7 @@ class VoiceManager:
         self.settings_path = Path(settings_path or self.base_dir / "config" / "voice_settings.json")
         self.logger = logger or self._create_logger()
         self._lock = threading.RLock()
+        self._is_listening = False
 
         self.state_machine = VoiceStateMachine(initial_state=VoiceState.READY, logger=self.logger)
         self.settings = self._load_settings()
@@ -109,13 +110,19 @@ class VoiceManager:
     def listen_once(
         self,
         status_callback: Optional[StatusCallback] = None,
-        timeout: int = 8,
-        phrase_time_limit: Optional[int] = 8,
-        silence_timeout: float = 0.8,
+        timeout: int = 10,
+        phrase_time_limit: Optional[int] = 15,
+        silence_timeout: float = 1.0,
     ) -> str:
         """Capture user speech once, performing safe barge-in and state transitions."""
         if not self.settings.get("voice_enabled", True):
             return ""
+
+        with self._lock:
+            if self._is_listening:
+                self.logger.warning("Voice listening already active; ignoring duplicate session request.")
+                return ""
+            self._is_listening = True
 
         # Safe barge-in: stop any active speech output before opening the microphone
         self.barge_in()
@@ -145,6 +152,9 @@ class VoiceManager:
             self.logger.error("Voice recognition error: %s", exc)
             self.state_machine.transition_to(VoiceState.ERROR, detail=str(exc))
             return ""
+        finally:
+            with self._lock:
+                self._is_listening = False
 
     def speak(self, text: str, wait: bool = False) -> None:
         """Speak text aloud using the configured TTS engine."""

@@ -140,7 +140,7 @@ class CommandRouter:
         if not target:
             return "What should I open?"
 
-        clean_target = re.sub(r"\s+(?:website|site|app|application)$", "", target).strip()
+        clean_target = re.sub(r"\s+(?:website|site|app|application)$", "", target).strip().rstrip(".?! ")
         if clean_target in self.browser.sites:
             self.current_service = clean_target
             return self.browser.open_site(clean_target)

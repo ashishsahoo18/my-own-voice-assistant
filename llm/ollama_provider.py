@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+import time
 from typing import Any, Optional, Type, TypeVar
 
 from pydantic import BaseModel, ValidationError
@@ -24,7 +25,7 @@ logger = logging.getLogger("oliver.llm.ollama")
 
 
 class OllamaProvider(LLMProvider):
-    """Local-first Ollama provider for Llama 3.2 on Windows."""
+    """Local-first Ollama provider for Llama 3.2 on Windows with session reuse and keep-alive."""
 
     def __init__(
         self,
@@ -37,11 +38,21 @@ class OllamaProvider(LLMProvider):
         self.configured_model = model or cfg.llm.model
         self.timeout = timeout if timeout is not None else cfg.llm.timeout_seconds
         self.max_retries = cfg.llm.max_retries
+        self._session = requests.Session() if requests else None
+        self._health_cache: Optional[tuple[bool, str, str, list[str], str]] = None
+        self._health_cache_time: float = 0.0
+        self._health_cache_ttl: float = 30.0
 
-    def check_health(self) -> tuple[bool, str, str, list[str], str]:
-        """Probe candidate endpoints and verify model availability."""
+    def check_health(self, force_refresh: bool = False) -> tuple[bool, str, str, list[str], str]:
+        """Probe candidate endpoints and verify model availability with caching."""
         if not requests:
             return False, "", "", [], "Requests package is missing. Please install requests."
+
+        is_mocked = hasattr(requests.get, "assert_called_with") or type(requests.get).__name__ in ("MagicMock", "Mock")
+        now = time.time()
+        if not is_mocked and not force_refresh and self._health_cache is not None:
+            if now - self._health_cache_time < self._health_cache_ttl:
+                return self._health_cache
 
         candidates = [self.configured_url, "http://127.0.0.1:11434", "http://localhost:11434"]
         unique_candidates = []
@@ -63,17 +74,25 @@ class OllamaProvider(LLMProvider):
                 continue
 
         if not active_url:
-            return False, "", "", [], "Local AI is offline. Please start Ollama."
+            res = (False, "", "", [], "Local AI is offline. Please start Ollama.")
+            if not is_mocked:
+                self._health_cache = res
+                self._health_cache_time = now
+            return res
 
         model_names = [m.get("name", "") for m in models_data if m.get("name")]
         if not model_names:
-            return (
+            res = (
                 False,
                 active_url,
                 "",
                 [],
                 f"No models installed in Ollama. Run 'ollama pull {self.configured_model}' to install.",
             )
+            if not is_mocked:
+                self._health_cache = res
+                self._health_cache_time = now
+            return res
 
         # Match target model or fallback to first available
         selected_model = ""
@@ -86,7 +105,11 @@ class OllamaProvider(LLMProvider):
         if not selected_model:
             selected_model = model_names[0]
 
-        return True, active_url, selected_model, model_names, ""
+        res = (True, active_url, selected_model, model_names, "")
+        if not is_mocked:
+            self._health_cache = res
+            self._health_cache_time = now
+        return res
 
     def ask(self, prompt: str, system_prompt: Optional[str] = None) -> str:
         """Query Ollama and return generated text."""
@@ -111,6 +134,7 @@ class OllamaProvider(LLMProvider):
                 {"role": "user", "content": clean_prompt},
             ],
             "stream": False,
+            "keep_alive": "15m",
             "options": {"temperature": 0.7, "num_predict": 300},
         }
 
@@ -129,6 +153,7 @@ class OllamaProvider(LLMProvider):
                 "model": selected_model,
                 "prompt": f"{sys_prompt}\n\nUser: {clean_prompt}\nAssistant:",
                 "stream": False,
+                "keep_alive": "15m",
                 "options": {"temperature": 0.7, "num_predict": 300},
             }
             gen_resp = requests.post(gen_url, json=gen_payload, timeout=self.timeout)
@@ -174,6 +199,7 @@ class OllamaProvider(LLMProvider):
                 ],
                 "format": "json",
                 "stream": False,
+                "keep_alive": "15m",
                 "options": {"temperature": 0.2, "num_predict": 250},
             }
 

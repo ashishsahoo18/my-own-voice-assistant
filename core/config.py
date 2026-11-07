@@ -145,6 +145,8 @@ class BrowserSettings(BaseModel):
             "reuters.com",
             "bbc.com",
             "nature.com",
+            "vercel.app",
+            "ashishsahoo.vercel.app",
         ]
     )
 
@@ -188,10 +190,7 @@ class ProductivitySettings(BaseModel):
 
 
 class Theme(BaseModel):
-    """Colour palette for the dark‑cyan UI theme.
-
-    All colours are expressed as hex strings compatible with customtkinter.
-    """
+    """Colour palette for the dark-cyan UI theme."""
 
     bg: str = "#0D182E"               # overall background
     surface: str = "#14243D"           # panels / cards background
@@ -200,8 +199,9 @@ class Theme(BaseModel):
     text_primary: str = "#FFFFFF"      # main text colour
     text_secondary: str = "#A9B8CC"    # secondary text
     success: str = "#22C55E"          # success badge
-    warning: str = "#F59E0B"          # warning / need‑confirm badge
+    warning: str = "#F59E0B"          # warning / need-confirm badge
     error: str = "#EF4444"            # error badge
+
 
 class OliverConfig(BaseModel):
     """Master application configuration for OLIVER 2.0."""
@@ -222,51 +222,7 @@ class OliverConfig(BaseModel):
     accent_color: str = Field(
         default_factory=lambda: os.getenv("ACCENT_COLOR", "#00d2ff").strip()
     )
-    # New centralized theme configuration
     theme_config: Theme = Field(default_factory=Theme)
-
-    router_mode: str = Field(
-        default_factory=lambda: os.getenv("ROUTER_MODE", "legacy").strip().lower(),
-        description="Feature flag: 'legacy' uses original dispatch; 'oliver' uses skill registry."
-    )
-
-    llm: LLMSettings = Field(default_factory=LLMSettings)
-    voice: VoiceSettings = Field(default_factory=VoiceSettings)
-    security: SecuritySettings = Field(default_factory=SecuritySettings)
-    agent: AgentSettings = Field(default_factory=AgentSettings)
-    storage: StorageSettings = Field(default_factory=StorageSettings)
-    browser: BrowserSettings = Field(default_factory=BrowserSettings)
-    productivity: ProductivitySettings = Field(default_factory=ProductivitySettings)
-
-    def is_path_allowed(self, target: Path | str) -> bool:
-        """Check if target path is inside allowed root folders."""
-        try:
-            resolved = Path(target).resolve()
-            for allowed in self.security.allowlist_roots:
-                allowed_resolved = allowed.resolve()
-                if resolved == allowed_resolved or allowed_resolved in resolved.parents:
-                    return True
-            return False
-        except Exception:
-            return False
-    """Master application configuration for OLIVER 2.0."""
-
-    app_name: str = Field(
-        default_factory=lambda: os.getenv("APP_NAME", "OLIVER 2.0").strip()
-    )
-    cockpit_title: str = Field(
-        default_factory=lambda: os.getenv("COCKPIT_TITLE", "OLIVER 2.0 — Windows AI Cockpit").strip()
-    )
-    version: str = Field(default="2.0.0")
-    user_name: str = Field(
-        default_factory=lambda: os.getenv("USER_NAME", "Ashish").strip() or "User"
-    )
-    theme: str = Field(
-        default_factory=lambda: os.getenv("THEME", "dark").strip().lower()
-    )
-    accent_color: str = Field(
-        default_factory=lambda: os.getenv("ACCENT_COLOR", "#00d2ff").strip()
-    )
 
     router_mode: str = Field(
         default_factory=lambda: os.getenv("ROUTER_MODE", "legacy").strip().lower(),

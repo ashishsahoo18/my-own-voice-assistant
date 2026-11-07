@@ -106,9 +106,12 @@ class BrowserSkill(BaseSkill):
         ]
 
     # --- Legacy Handlers ---
-    def open_site(self, site_name: str) -> ToolResult:
-        res = self.browser.open_site(site_name)
-        return ToolResult(status="SUCCESS", message=res, data={"site": site_name})
+    def open_site(self, site_name: Optional[str] = None, url: Optional[str] = None, **kwargs) -> ToolResult:
+        target = site_name or url or kwargs.get("site") or kwargs.get("target") or ""
+        res = self.browser.open_site(str(target))
+        is_error = "not installed or available" in res.lower() or "couldn't identify" in res.lower() or "blocked" in res.lower()
+        status = "FAILED" if is_error else "SUCCESS"
+        return ToolResult(status=status, message=res, data={"site": str(target)})
 
     def search_google(self, query: str) -> ToolResult:
         res = self.browser.search_google(query)

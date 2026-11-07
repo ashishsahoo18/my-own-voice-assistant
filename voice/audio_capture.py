@@ -33,6 +33,18 @@ class AudioCapture:
         self._is_active = False
         self._microphone: Optional[sr.Microphone] = None
         self._active_source: Optional[Any] = None
+        self._has_calibrated = False
+
+    @classmethod
+    def list_available_devices(cls) -> list[tuple[int, str]]:
+        """Return list of (index, device_name) for installed audio input devices."""
+        devices = []
+        try:
+            for idx, name in enumerate(sr.Microphone.list_microphone_names()):
+                devices.append((idx, name))
+        except Exception:
+            pass
+        return devices
 
     @property
     def is_active(self) -> bool:
@@ -99,9 +111,9 @@ class AudioCapture:
     def capture_audio(
         self,
         recognizer: sr.Recognizer,
-        timeout: Optional[float] = 8.0,
-        phrase_time_limit: Optional[float] = 10.0,
-        ambient_duration: float = 0.4,
+        timeout: Optional[float] = 10.0,
+        phrase_time_limit: Optional[float] = 15.0,
+        ambient_duration: float = 0.3,
     ) -> sr.AudioData:
         """Safely capture speech audio with explicit hardware management and error isolation.
         
@@ -112,8 +124,10 @@ class AudioCapture:
                 mic = self.get_microphone()
                 with mic as source:
                     self._is_active = True
-                    if ambient_duration > 0:
+                    # Only calibrate noise on initial capture to prevent cutting off the speaker's first words
+                    if not self._has_calibrated and ambient_duration > 0:
                         recognizer.adjust_for_ambient_noise(source, duration=ambient_duration)
+                        self._has_calibrated = True
 
                     audio = recognizer.listen(
                         source,

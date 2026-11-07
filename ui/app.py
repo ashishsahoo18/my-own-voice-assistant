@@ -509,6 +509,10 @@ class AshishApp(ctk.CTk):
         self.store = ChatStore()
         self.voice_manager = VoiceManager()
 
+        # Warm up local Ollama in background to eliminate first-query delay
+        if hasattr(self.assistant, 'ai_service') and hasattr(self.assistant.ai_service, 'warmup'):
+            self.assistant.ai_service.warmup()
+
         self.status_var = ctk.StringVar(value="SYSTEM ONLINE")
         self.ai_state_var = ctk.StringVar(value="READY")
         self.theme_var = ctk.StringVar(value="Dark Mode")
@@ -729,6 +733,7 @@ class AshishApp(ctk.CTk):
             highlightthickness=0,
         )
         self.orb_canvas.grid(row=0, column=0)
+        self.orb_canvas.bind('<Button-1>', lambda event: self.console_panel.start_voice_input() if hasattr(self, 'console_panel') and self.console_panel else None)
 
         self._orb_phase = 0.0
 
