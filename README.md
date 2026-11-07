@@ -304,6 +304,68 @@ python -m unittest discover -s tests/regression -p "test_*.py"
 
 ---
 
+## 🗺️ OLIVER 3.0 Development Status & Roadmap
+
+### Implemented
+- **Phase 0: Codebase Audit & Architectural Plan**:
+  - Full codebase inspection documented in docs/ARCHITECTURE_AUDIT.md.
+  - Master development roadmap created in docs/OLIVER_3_PLAN.md.
+- **Phase 0.5: Codebase Stabilization**:
+  - Removed unreachable duplicate code in i/assistant.py after the active handle() return statement.
+  - Preserved active 
+equest_id latency telemetry parameter and forwarding to AIService.ask().
+- **Phase 1: Central Backend Foundation (ackend/)**:
+  - Independent Python + FastAPI service skeleton created under ackend/. Zero modifications made to the desktop app.
+  - **Core Configuration**: Pydantic-Settings environment loading via .env / .env.example.
+  - **Security & Authentication**:
+    - User registration (POST /api/auth/register) with unique email enforcement and bcrypt password hashing.
+    - User authentication (POST /api/auth/login) with signed, short-lived JWT access tokens (15-min expiry).
+    - Rotating refresh tokens (POST /api/auth/refresh) stored cryptographically hashed (SHA-256), with token reuse detection and automatic revocation.
+    - Logout and session revocation (POST /api/auth/logout).
+  - **User & Device Management**:
+    - User profile inspection (GET /api/user/profile) and preference management (PATCH /api/user/preferences).
+    - Device registry (POST /api/devices/register, GET /api/devices) for cross-platform hardware coordination.
+  - **Chat & Multi-Tenant Isolation**:
+    - AI chat endpoint (POST /api/chat) with automatic conversation creation and message persistence.
+    - Conversation history (GET /api/conversations) and conversation message inspection (GET /api/conversations/{id}/messages).
+    - Absolute tenant isolation: all queries filter strictly by authenticated user ID (proven by cross-user tests).
+  - **AI Provider Layer**:
+    - Modular AIProvider abstract interface.
+    - OllamaProvider reusing the exact local model (llama3.2) and system prompts from OLIVER 2.0.
+  - **Diagnostics & Operations**:
+    - System health check (GET /api/health) reporting database and Ollama availability.
+    - Wakeup greeting (POST /api/welcome).
+    - Rate limiting (slowapi) configured on auth (10/min) and chat (30/min).
+    - Secret-scrubbed structured logging (redacts passwords, tokens, and authorization headers).
+    - Alembic migration skeleton (ackend/alembic/) and SQLAlchemy 2.x ORM models designed for both SQLite dev and PostgreSQL production.
+  - **Testing**:
+    - 14 automated unit/integration tests (ackend/tests/) covering auth flows, token rotation, expiry, multi-tenant cross-user isolation, and endpoint operations.
+    - Live Uvicorn server probe verifying all 13 endpoints with real HTTP calls and measured latencies.
+
+### Planned
+- **Phase 2: Database Migration (PostgreSQL & Shared Data)**:
+  - Docker Compose or managed PostgreSQL database setup.
+  - Alembic production migrations.
+  - Data migration adapter for existing SQLite records (database/oliver.db).
+- **Phase 3: Realtime WebSockets & Streaming**:
+  - WebSocket endpoint (/ws/chat) for token-by-token streaming responses.
+  - Device status broadcasting and sync events.
+- **Phase 4: Desktop Adapter (Connecting CustomTkinter Cockpit to Backend)**:
+  - Non-invasive HTTP/WebSocket client in the Windows CustomTkinter app.
+  - Offline fallback to existing local direct execution when backend is unreachable.
+- **Phase 5: Flutter Mobile Application**:
+  - Cross-platform mobile client (Flutter + Dart) for Android and iOS.
+  - Mobile authentication, chat interface, and device registration.
+- **Phase 6: Cross-Device Voice & Task Sync**:
+  - Mobile audio streaming / speech recognition and response audio playback.
+  - Task and reminder synchronization across desktop and mobile.
+- **Phase 7: End-to-End Hardening & Security Audit**:
+  - Rate-limit tuning, penetration testing, and security policy verification.
+- **Phase 8: Production Release & Deployment**:
+  - Packaging, automated Windows Task Scheduler wakeup, and final documentation.
+
+---
+
 ## ⚠️ Troubleshooting & Known Limitations
 
 ### 1. "Local AI is offline. Please start Ollama."
