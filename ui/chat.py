@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import tkinter as tk
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 import customtkinter as ctk
 
