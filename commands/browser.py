@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import webbrowser
+import urllib.parse
+import ipaddress
 from urllib.parse import quote_plus
 
 
