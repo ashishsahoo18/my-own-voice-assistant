@@ -1,7 +1,7 @@
 # OLIVER 3.0 — Master Plan: Phase 2 PostgreSQL & Shared Data
 
 **Document:** `docs/OLIVER_3_PHASE_2_PLAN.md`  
-**Status:** Approved for Planning Only (Phase 2.0)  
+**Status:** Approved for Planning Only (Phase 2.0 Refinement)  
 **Strict Policy:** No code changes, no container execution, no database migrations, and no historical imports until explicit phase approval.
 
 ---
@@ -19,23 +19,24 @@
 
 ---
 
-## 2. Six Architecture Findings & Corrections
+## 2. Architecture Findings & Corrections
 
 ### A. SQLite Snapshot & Backup Safety
 When creating a historical copy from the existing desktop database (`database/oliver.db`):
 1. **Strict Read-Only Connection**:
    The source connection must be opened via SQLite URI syntax with `mode=ro`:
    ```python
-   import os, sqlite3, urllib.parse
+   import os, sqlite3
+   from pathlib import Path
 
    source_path = os.path.abspath("database/oliver.db")
    # Safe Windows path handling with spaces and drive letters
-   file_url = Path(source_path).as_uri() + "?mode=ro"
+   file_url = Path(source_path).resolve().as_uri() + "?mode=ro"
    source_conn = sqlite3.connect(file_url, uri=True)
    ```
    When opened with `mode=ro`, the SQLite engine strictly prohibits writes and will fail immediately if any write operation is attempted.
 2. **Safe Windows Path Handling**:
-   Paths with spaces (e.g. `c:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant`) must use `pathlib.Path.resolve().as_uri()` to ensure correct URI encoding (`%20`).
+   Paths with spaces (e.g. `c:\Users\ASHISH\OneDrive\Desktop\Documents\my own voice assistant`) must use `Path.resolve().as_uri()` to ensure correct URI encoding (`%20`).
 3. **WAL Mode & Active Connections**:
    `database/oliver.db` is configured in `wal` mode. When a database is in WAL mode, active transactions may reside in `oliver.db-wal` indexed by `oliver.db-shm`. Standard filesystem copies (`shutil.copyfile`) can produce torn or corrupt pages if copied while a process writes or checkpoints.
    Python's native `sqlite3.Connection.backup()` operates at the pager layer, pulling consistent committed pages across both the main database file and the WAL log.
@@ -50,6 +51,17 @@ When creating a historical copy from the existing desktop database (`database/ol
    ```
 6. **Zero Impact on Original Database**:
    The original `database/oliver.db` and its associated WAL/SHM files are never modified, checkpointed, renamed, or deleted.
+7. **SQLite WAL and SHM Sidecar Protection**:
+   - The desktop SQLite database uses Write-Ahead Logging (`-wal`) and Shared Memory (`-shm`) sidecar files.
+   - Required `.gitignore` patterns to prevent committing transient WAL/SHM files:
+     ```gitignore
+     database/*.db-wal
+     database/*.db-shm
+     *.db-wal
+     *.db-shm
+     ```
+   - *Repository Status Note:* Commit `be90df3` tracked `database/oliver.db-shm` and `database/oliver.db-wal`. Git will continue observing local access changes to `database/oliver.db-shm` until untracked in a future approved phase (`git rm --cached`).
+   - *Strict Rule:* These files must never be manually edited, deleted, staged, or committed during development.
 
 ---
 
@@ -83,21 +95,40 @@ When creating a historical copy from the existing desktop database (`database/ol
 ---
 
 ### D. Historical Import Idempotency & Provenance
-- **Rejection of Title-Based Duplicate Detection**:
-  In conversation systems, multiple sessions legitimately share identical titles (e.g., `"New Chat"`, `"Python Help"`). Title matching causes false collisions and silent data loss.
-- **Provenance-Based Identity Strategy**:
-  1. **Provenance Columns in Conversation**:
-     - `legacy_source_db`: `String(50)` (e.g., `'desktop_oliver_v2'`).
-     - `legacy_session_id`: `String(100)` (e.g., `'legacy_ayra_chat_1'`).
-     - Composite unique constraint: `UniqueConstraint('user_id', 'legacy_session_id', name='uq_user_legacy_session')`.
-  2. **Deterministic Target Conversation ID**:
-     Generate a stable UUIDv5 derived from the legacy session ID:
-     `uuid.uuid5(uuid.NAMESPACE_DNS, f"oliver.legacy.{session_id}")`
-     Re-running the import tool computes the exact same ID every time.
-  3. **Message-Level Duplicate Prevention**:
-     Messages are inserted with their original sequential order and timestamps. A composite constraint on `(conversation_id, created_at, role)` guarantees that re-running the migration skips already imported messages without duplicating records.
-  4. **Repeatable Preview**:
-     The migration CLI tool will provide a mandatory `--preview` mode that outputs a structured report (session count, message count, target user UUID, timestamp range) without executing any write transactions.
+
+#### 1. Rejection of `(conversation_id, created_at, role)` Uniqueness
+Inspection of `database/oliver.db` proved that sequential user/assistant message pairs share **identical timestamps down to the second**:
+- `ID=1`: `role='user'`, `created_at='2026-09-07T22:34:09'`, `content='open whatsapp'`
+- `ID=2`: `role='assistant'`, `created_at='2026-09-07T22:34:09'`, `content='Opening WhatsApp Web.'`
+- `ID=3`: `role='user'`, `created_at='2026-09-07T22:34:14'`, `content='open browser'`
+- `ID=4`: `role='assistant'`, `created_at='2026-09-07T22:34:14'`, `content='I do not support opening browser yet.'`
+
+Relying on `(conversation_id, created_at, role)` as a uniqueness constraint is unsafe. If rapid user inputs or retries occur in the same second, valid messages would be dropped or trigger collision errors. Title matching is similarly rejected because multiple conversations legitimately share identical titles (e.g., `"New Chat"`).
+
+#### 2. Safe Deterministic Migration Identity Strategy
+Inspection of the legacy schema confirms a stable integer primary key exists in SQLite:
+`CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, ...)`
+
+The migration identity will be derived deterministically from three immutable source attributes:
+1. **Source Database Identity**: `legacy_source_db = "desktop_oliver_v2"`
+2. **Legacy Session ID**: `legacy_session_id = session.session_id` (`"legacy_ayra_chat_1"`)
+3. **Legacy Message ID**: `legacy_message_id = message.id` (Integers `1` through `8`)
+
+#### 3. Deterministic Target Identifiers & Constraints
+- **Conversation Level**:
+  - Target Conversation ID: `uuid.uuid5(uuid.NAMESPACE_DNS, f"oliver.legacy.{session_id}")`
+  - Unique Constraint: `UniqueConstraint('user_id', 'legacy_session_id', name='uq_user_legacy_session')`
+- **Message Level**:
+  - Target Message ID: `uuid.uuid5(uuid.NAMESPACE_DNS, f"oliver.legacy.{session_id}.msg.{legacy_message_id}")`
+  - Provenance Columns on Message:
+    - `legacy_message_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)`
+  - Unique Constraint:
+    - `UniqueConstraint('conversation_id', 'legacy_message_id', name='uq_conversation_legacy_msg_id')`
+
+#### 4. Safe Ordering & Repeatable Execution
+- **Ordering**: The migration reads messages using `ORDER BY id ASC`. Messages are inserted sequentially preserving exact historical order and original `created_at` timestamps.
+- **Idempotent Re-execution**: Before inserting any message, the migration queries PostgreSQL for existing records matching `conversation_id` and `legacy_message_id`. Any existing record is skipped (`SKIPPED_EXISTING`), guaranteeing that running the migration multiple times produces zero duplicate messages.
+- **Repeatable Preview**: A mandatory `--preview` mode outputs a dry-run table (IDs, roles, timestamps, content preview, collision status) without executing write transactions.
 
 ---
 
@@ -112,7 +143,7 @@ When creating a historical copy from the existing desktop database (`database/ol
   `pg_restore --clean` issues `DROP TABLE` before recreating tables. If the restore fails halfway (due to missing extensions, permissions, or corrupt archive bytes), the original tables are already destroyed!
   **Safe Procedure:** Test the restore first against a disposable database (`oliver_test_restore`). In production, restore into a fresh database and swap connection strings once verification succeeds.
 - **Never use `alembic downgrade base` as a production rollback**:
-  `downgrade base` drops all tables and wipes all user data. It is only for clean-slate test teardown.
+  `downgrade base` drops all tables and wipes all user data. It is strictly for clean-slate test teardown.
 
 #### 2. Backend SQLite Fallback
 - The backend's local offline database is `backend/oliver_dev.db`.
@@ -127,16 +158,28 @@ When creating a historical copy from the existing desktop database (`database/ol
 ---
 
 ### F. Git Commit Metadata & Timestamp Verification
-Inspection of commit `c33e4461334f55fb65e8638ff8f7327881cdabba`:
-- **Commit**: `c33e4461334f55fb65e8638ff8f7327881cdabba`
-- **Author**: `ashishsahoo18 <sahooashish673@gmail.com>`
-- **AuthorDate**: `Sat Nov 7 18:20:18 2026 -0500`
-- **Committer**: `ashishsahoo18 <sahooashish673@gmail.com>`
-- **CommitDate**: `Sat Nov 7 18:20:18 2026 -0500`
-- **Message**: `Oliver3.0 working`
-- **Branch**: `main` (clean, up to date with `origin/main`).
-- **Untracked files note**: SQLite shared-memory index (`database/oliver.db-shm` and `database/oliver.db-wal`) appear as untracked because `.gitignore` specifies `database/*.db` which does not match `.db-shm` or `.db-wal`. These files will remain completely untouched.
-- **Explanation of Discrepancy**: The 18:20:18 -0500 timestamp (6:20 PM EST) was chronological with the file generation completed between 17:51 and 18:15 EST. The "07:46" noted in the earlier query was a 12-hour/24-hour transcription notation of 17:46. Authoritative Git metadata confirms strict chronological progression.
+
+Read-only inspection of commit `c33e4461334f55fb65e8638ff8f7327881cdabba` using:
+```powershell
+git log -1 --format="commit: %H%nauthor_name: %an%nauthor_email: %ae%nauthor_date_raw: %at%nauthor_date_iso: %ai%ncommitter_date_raw: %ct%ncommitter_date_iso: %ci" c33e4461334f55fb65e8638ff8f7327881cdabba
+```
+**Exact Verification Output:**
+```text
+commit: c33e4461334f55fb65e8638ff8f7327881cdabba
+author_name: ashishsahoo18
+author_email: sahooashish673@gmail.com
+author_date_raw: 1794093618
+author_date_iso: 2026-11-07 18:20:18 -0500
+committer_date_raw: 1794093618
+committer_date_iso: 2026-11-07 18:20:18 -0500
+```
+- **Author Timestamp (Raw Epoch):** `1794093618` (`2026-11-07 18:20:18`)
+- **Author Timezone Offset:** `-0500` (EST)
+- **Committer Timestamp (Raw Epoch):** `1794093618` (`2026-11-07 18:20:18`)
+- **Committer Timezone Offset:** `-0500` (EST)
+- **Workstation Timestamp (PowerShell `[DateTimeOffset]::Now`):** `2026-11-07T18:42:07.9735157-05:00` (Timezone `-05:00`)
+- **Status of "07:46" Discrepancy:**
+  Authoritative Git history shows commit `c33e446` occurred at `18:20:18 -0500` (6:20 PM EST). No commit, branch, or tag in the repository contains a `07:46` timestamp. Because no repository evidence accounts for the `07:46` reference in the prior review prompt, this discrepancy is formally recorded as **unresolved** rather than attributed to assumed notation differences.
 
 ---
 
@@ -181,9 +224,10 @@ Inspection of commit `c33e4461334f55fb65e8638ff8f7327881cdabba`:
 ## 4. Database Preservation Rules
 
 1. **Rule 1 (Zero Desktop Touches)**: Never write, checkpoint, modify, or delete `database/oliver.db` or its WAL/SHM files.
-2. **Rule 2 (Snapshot First)**: Historical migrations must operate exclusively on an independent copy created via `sqlite3.Connection.backup()`.
-3. **Rule 3 (Backend Dev Isolation)**: `backend/oliver_dev.db` is an independent test/dev file. It must not be overwritten or treated as production data.
-4. **Rule 4 (No Blind Downgrades)**: Production rollbacks must use point-in-time database dumps, never `alembic downgrade base`.
+2. **Rule 2 (Sidecar Protection)**: Preserve `database/oliver.db-wal` and `database/oliver.db-shm`. Do not delete, stage, commit, or manually edit them. Include `*.db-wal` and `*.db-shm` in `.gitignore`.
+3. **Rule 3 (Snapshot First)**: Historical migrations must operate exclusively on an independent copy created via `sqlite3.Connection.backup()`.
+4. **Rule 4 (Backend Dev Isolation)**: `backend/oliver_dev.db` is an independent test/dev file. It must not be overwritten or treated as production data.
+5. **Rule 5 (No Blind Downgrades)**: Production rollbacks must use point-in-time database dumps, never `alembic downgrade base`.
 
 ---
 
@@ -250,30 +294,3 @@ flowchart TD
 - [ ] Confirm PostgreSQL container will bind strictly to `127.0.0.1:5432`.
 - [ ] Confirm use of `psycopg` (psycopg 3) as the Python database driver.
 - [ ] Confirm target owner email for historical data import (when Phase 2.4/2.5 is reached).
-
----
-
-## Summary Report for Phase 2.0 Completion
-
-1. **Documents Inspected**:
-   - `backend/alembic/env.py`, `backend/alembic.ini`, `backend/alembic/versions/`
-   - `backend/app/core/database.py`, `backend/app/main.py`, `backend/app/models/`
-   - `database/oliver.db` (read-only journal mode and schema check)
-   - Git commit history for `c33e4461334f55fb65e8638ff8f7327881cdabba`
-2. **Files Created/Modified**:
-   - Created: `docs/OLIVER_3_PHASE_2_PLAN.md` (comprehensive Phase 2 architecture and safety plan).
-3. **Git Status**:
-   - Branch: `main` (up to date with `origin/main`).
-   - Untracked files: `docs/OLIVER_3_PHASE_2_PLAN.md` (and existing SQLite WAL/SHM indexes).
-   - No code, databases, containers, or migrations were modified or executed.
-4. **Confirmation**:
-   - Zero application code edited.
-   - Zero dependencies installed.
-   - Zero databases modified.
-   - Zero migrations generated or executed.
-   - Zero Docker containers started.
-
----
-
-**STOPPED. Phase 2.0 is complete. Standing by for your review and explicit approval before Phase 2.1.**
-
