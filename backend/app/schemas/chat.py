@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, description="User prompt or command")
     conversation_id: Optional[str] = Field(default=None, description="Existing conversation ID or None for auto-create")
+    request_id: Optional[str] = Field(default=None, description="Client-generated idempotency request UUIDv4")
 
 
 class ChatResponse(BaseModel):
