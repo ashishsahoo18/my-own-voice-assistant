@@ -189,6 +189,31 @@ class ProductivitySettings(BaseModel):
     auto_advance_recurring: bool = Field(default=True)
 
 
+class BackendSettings(BaseModel):
+    """Central backend integration and feature flag settings."""
+
+    backend_mode: str = Field(
+        default_factory=lambda: os.getenv("BACKEND_MODE", "local").strip().lower(),
+        description="'local' for 100% desktop local execution, 'backend' for central FastAPI routing",
+    )
+    backend_url: str = Field(
+        default_factory=lambda: os.getenv("BACKEND_URL", "http://127.0.0.1:8000").strip().rstrip("/"),
+    )
+    auto_fallback_local: bool = Field(
+        default_factory=lambda: os.getenv("BACKEND_AUTO_FALLBACK", "true").strip().lower() in {"1", "true", "yes", "on"},
+    )
+    connect_timeout_seconds: float = Field(
+        default_factory=lambda: float(os.getenv("BACKEND_CONNECT_TIMEOUT", "5.0").strip()),
+        ge=1.0,
+        le=30.0,
+    )
+    read_timeout_seconds: float = Field(
+        default_factory=lambda: float(os.getenv("BACKEND_READ_TIMEOUT", "30.0").strip()),
+        ge=5.0,
+        le=120.0,
+    )
+
+
 class Theme(BaseModel):
     """Colour palette for the dark-cyan UI theme."""
 
@@ -236,6 +261,7 @@ class OliverConfig(BaseModel):
     storage: StorageSettings = Field(default_factory=StorageSettings)
     browser: BrowserSettings = Field(default_factory=BrowserSettings)
     productivity: ProductivitySettings = Field(default_factory=ProductivitySettings)
+    backend: BackendSettings = Field(default_factory=BackendSettings)
 
     def is_path_allowed(self, target: Path | str) -> bool:
         """Check if target path is inside allowed root folders."""
