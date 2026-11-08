@@ -2,7 +2,7 @@
   "voice_enabled": true,
   "auto_speaking": true,
   "auto_send_voice": true,
-  "voice_id": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0",
+  "voice_id": "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_ZIRA_11.0",
   "speech_rate": 185,
   "volume": 1.0,
   "language": "en",
