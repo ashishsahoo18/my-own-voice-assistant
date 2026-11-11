@@ -110,24 +110,36 @@ Inspection of the legacy schema confirms a stable integer primary key exists in 
 `CREATE TABLE messages (id INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL, ...)`
 
 The migration identity will be derived deterministically from three immutable source attributes:
-1. **Source Database Identity**: `legacy_source_db = "desktop_oliver_v2"`
-2. **Legacy Session ID**: `legacy_session_id = session.session_id` (`"legacy_ayra_chat_1"`)
-3. **Legacy Message ID**: `legacy_message_id = message.id` (Integers `1` through `8`)
+1. **Stable Source Database Identifier**: `source_db_id = "desktop_oliver_v2"` (assigned once and permanently retained in provenance columns).
+2. **Legacy Session ID**: `legacy_session_id = session.session_id` (`"legacy_ayra_chat_1"`).
+3. **Legacy Message ID**: `legacy_message_id = message.id` (Integers `1` through `8`).
 
-#### 3. Deterministic Target Identifiers & Constraints
-- **Conversation Level**:
-  - Target Conversation ID: `uuid.uuid5(uuid.NAMESPACE_DNS, f"oliver.legacy.{session_id}")`
-  - Unique Constraint: `UniqueConstraint('user_id', 'legacy_session_id', name='uq_user_legacy_session')`
-- **Message Level**:
-  - Target Message ID: `uuid.uuid5(uuid.NAMESPACE_DNS, f"oliver.legacy.{session_id}.msg.{legacy_message_id}")`
-  - Provenance Columns on Message:
+#### 3. Deterministic Target Identifiers & Provenance Schema
+- **UUIDv5 Canonical Input Strings**:
+  - **Conversation Level**:
+    `canonical_conv_str = f"oliver.legacy.{source_db_id}.{legacy_session_id}"`
+    `target_conv_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, canonical_conv_str))`
+  - **Message Level**:
+    `canonical_msg_str = f"oliver.legacy.{source_db_id}.{legacy_session_id}.msg.{legacy_message_id}"`
+    `target_msg_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, canonical_msg_str))`
+- **Provenance Columns on Target Models**:
+  - `Conversation` model:
+    - `legacy_source_db: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)`
+    - `legacy_session_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)`
+    - Unique Constraint: `UniqueConstraint('user_id', 'legacy_source_db', 'legacy_session_id', name='uq_user_legacy_conv')`
+  - `Message` model:
+    - `legacy_source_db: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)`
+    - `legacy_session_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)`
     - `legacy_message_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)`
-  - Unique Constraint:
-    - `UniqueConstraint('conversation_id', 'legacy_message_id', name='uq_conversation_legacy_msg_id')`
+    - Unique Constraint: `UniqueConstraint('legacy_source_db', 'legacy_session_id', 'legacy_message_id', name='uq_source_session_msg')`
+- **Compatibility with Ordinary New Messages**:
+  `legacy_source_db`, `legacy_session_id`, and `legacy_message_id` are strictly `nullable=True`. For ordinary new messages created in OLIVER 3.0 via `POST /api/chat`, these columns default to `NULL`. In standard SQL and PostgreSQL, unique constraints ignore rows with `NULL` in nullable columns (or use a partial unique index `WHERE legacy_message_id IS NOT NULL`), ensuring 100% compatibility with ordinary messaging.
+- **Cross-Database Isolation**:
+  If future migrations import data from another device or backup (e.g. `source_db_id = "phone_backup_2026"`), the composite key `(source_db_id, legacy_session_id, legacy_message_id)` guarantees uniqueness across distinct source databases even if both source databases used message ID `1`.
 
 #### 4. Safe Ordering & Repeatable Execution
 - **Ordering**: The migration reads messages using `ORDER BY id ASC`. Messages are inserted sequentially preserving exact historical order and original `created_at` timestamps.
-- **Idempotent Re-execution**: Before inserting any message, the migration queries PostgreSQL for existing records matching `conversation_id` and `legacy_message_id`. Any existing record is skipped (`SKIPPED_EXISTING`), guaranteeing that running the migration multiple times produces zero duplicate messages.
+- **Idempotent Re-execution**: Before inserting any message, the migration queries PostgreSQL for existing records matching `(legacy_source_db, legacy_session_id, legacy_message_id)`. Any existing record is skipped (`SKIPPED_EXISTING`), guaranteeing that running the migration multiple times produces zero duplicate messages without relying on timestamps, titles, or message text.
 - **Repeatable Preview**: A mandatory `--preview` mode outputs a dry-run table (IDs, roles, timestamps, content preview, collision status) without executing write transactions.
 
 ---
@@ -157,13 +169,14 @@ The migration identity will be derived deterministically from three immutable so
 
 ---
 
-### F. Git Commit Metadata & Timestamp Verification
+### F. Git Commit Metadata & Workstation Clock Verification
 
-Read-only inspection of commit `c33e4461334f55fb65e8638ff8f7327881cdabba` using:
+#### 1. Git Commit Metadata Inspection
+Command:
 ```powershell
 git log -1 --format="commit: %H%nauthor_name: %an%nauthor_email: %ae%nauthor_date_raw: %at%nauthor_date_iso: %ai%ncommitter_date_raw: %ct%ncommitter_date_iso: %ci" c33e4461334f55fb65e8638ff8f7327881cdabba
 ```
-**Exact Verification Output:**
+Output:
 ```text
 commit: c33e4461334f55fb65e8638ff8f7327881cdabba
 author_name: ashishsahoo18
@@ -177,9 +190,33 @@ committer_date_iso: 2026-11-07 18:20:18 -0500
 - **Author Timezone Offset:** `-0500` (EST)
 - **Committer Timestamp (Raw Epoch):** `1794093618` (`2026-11-07 18:20:18`)
 - **Committer Timezone Offset:** `-0500` (EST)
-- **Workstation Timestamp (PowerShell `[DateTimeOffset]::Now`):** `2026-11-07T18:42:07.9735157-05:00` (Timezone `-05:00`)
-- **Status of "07:46" Discrepancy:**
-  Authoritative Git history shows commit `c33e446` occurred at `18:20:18 -0500` (6:20 PM EST). No commit, branch, or tag in the repository contains a `07:46` timestamp. Because no repository evidence accounts for the `07:46` reference in the prior review prompt, this discrepancy is formally recorded as **unresolved** rather than attributed to assumed notation differences.
+
+#### 2. Workstation Clock & Timezone Inspection
+Commands:
+```powershell
+Get-Date -Format o
+Get-TimeZone
+(Get-Date).ToUniversalTime().ToString('o')
+```
+Exact Outputs:
+```text
+Local Time (ISO 8601): 2026-11-07T18:50:20.8910520-05:00
+
+Timezone Details:
+Id                         : US Eastern Standard Time
+DisplayName                : (UTC-05:00) Indiana (East)
+StandardName               : US Eastern Standard Time
+DaylightName               : US Eastern Standard Time
+BaseUtcOffset              : -05:00:00
+SupportsDaylightSavingTime : False
+
+UTC Time (ISO 8601):    2026-11-07T23:50:20.9321490Z
+```
+
+#### 3. Evaluation of Workstation vs. Review-Time Discrepancy
+- The workstation system clock consistently reports evening time (`18:50:20 -05:00`, UTC `23:50:20Z`), and all local Git commits (`c33e446` at `18:20:18`, `b95c45d` at `18:46:22`, `c43ed9b` at `18:46:25`) align with this workstation clock.
+- The external review-time reference indicates morning time (approximately `2026-11-07T08:08:00-05:00`), diverging by approximately 10 hours and 42 minutes.
+- **Finding:** The workstation clock is **inconsistent** with the external review-time reference. Because this divergence cannot be independently reconciled using repository or system artifacts alone, it is formally recorded as **unresolved**. No changes have been made to the system clock or Git history.
 
 ---
 
