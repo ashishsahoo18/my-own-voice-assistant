@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 import re
 from typing import Any, Optional
@@ -76,6 +77,7 @@ class IntentRouter:
             (re.compile(r"^sleep(?:\s+(?:the\s+)?(?:computer|pc))?$", re.IGNORECASE), "windows.sleep", ""),
 
             # Browser & Navigation
+            (re.compile(r"^ask\s+(?:(?:the\s+|this\s+)?(?:current\s+)?(?:web\s*page|page)|web\s*page)\s+(?:to\s+)?(.+)$", re.IGNORECASE), "browser.ask_page", "question"),
             (re.compile(r"^(?:open|browse\s+to|navigate\s+to)\s+(?:web\s*page\s+|url\s+|page\s+)?(https?://\S+)$", re.IGNORECASE), "browser.open_page", "url"),
             (re.compile(r"^summarize\s+(?:web\s*page\s+|url\s+|page\s+)(https?://\S+)$", re.IGNORECASE), "browser.summarize_page", "url"),
             (re.compile(r"^summarize\s+(?:the\s+)?(?:current\s+)?(?:web\s*page|page)$", re.IGNORECASE), "browser.summarize_page", ""),
@@ -258,11 +260,39 @@ class IntentRouter:
     def _classify_with_llm(self, text: str) -> Optional[IntentClassification]:
         """Request structured intent classification from Ollama."""
         tools = self.registry.list_tools(only_enabled=True)
-        tool_descriptions = "\n".join(f"- {t.name}: {t.description}" for t in tools[:20])
+        tool_desc_lines = []
+        for t in tools[:20]:
+            args_info = []
+            if t.handler:
+                try:
+                    sig = inspect.signature(t.handler)
+                    for param in sig.parameters.values():
+                        if param.kind in (inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.VAR_KEYWORD):
+                            continue
+                        if t.name == "browser.ask_page" and param.name == "query":
+                            # Hide backward-compatibility alias from the LLM so it always outputs 'question'
+                            continue
+                        # browser.ask_page question is logically required even if typed with default=None for compatibility
+                        if t.name == "browser.ask_page" and param.name == "question":
+                            req_str = "required"
+                        else:
+                            req_str = "required" if param.default == inspect.Parameter.empty else f"optional, default={param.default}"
+                        args_info.append(f"{param.name} ({req_str})")
+                except (ValueError, TypeError):
+                    pass
+            args_str = ", ".join(args_info) if args_info else "none"
+            tool_desc_lines.append(f"- {t.name}: {t.description}\n  Supported arguments: [{args_str}]")
+
+        tool_descriptions = "\n".join(tool_desc_lines)
 
         prompt = (
-            f"User request: '{text}'\n"
-            f"Available tools:\n{tool_descriptions}\n"
+            f"User request: '{text}'\n\n"
+            f"Available tools and exact supported arguments:\n{tool_descriptions}\n\n"
+            "Rules for tool classification:\n"
+            "1. Choose the most specific tool matching the user's intent.\n"
+            "2. In 'arguments', use ONLY the exact supported argument names listed above. Do not invent or rename argument keys.\n"
+            "3. For 'browser.ask_page', the argument for the question MUST be named 'question' (required), not 'query'. 'url' is optional.\n"
+            "4. Example valid JSON output: {\"skill_name\": \"browser\", \"tool_name\": \"browser.ask_page\", \"arguments\": {\"question\": \"who created Python\"}, \"confidence\": 0.95, \"reasoning\": \"Grounded webpage Q&A\"}\n\n"
             "Classify which tool best fits the user request and extract necessary arguments."
         )
 

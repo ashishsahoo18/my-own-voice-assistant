@@ -15,12 +15,33 @@ class TranscriptionResult:
     """Standardized speech recognition transcription output."""
 
     text: str
-    confidence: float = 1.0
+    confidence: Optional[float] = None
     engine: str = "unknown"
     is_offline: bool = True
     latency_s: float = 0.0
     external_service_disclosed: bool = False
+    confidence_available: bool = True
     details: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Sanitize and validate confidence score."""
+        if not self.confidence_available or self.confidence is None or isinstance(self.confidence, bool):
+            self.confidence = None
+            self.confidence_available = False
+            return
+
+        try:
+            import math
+            conf = float(self.confidence)
+            if math.isnan(conf) or math.isinf(conf) or conf < 0.0 or conf > 1.0:
+                self.confidence = None
+                self.confidence_available = False
+            else:
+                self.confidence = conf
+                self.confidence_available = True
+        except (ValueError, TypeError):
+            self.confidence = None
+            self.confidence_available = False
 
     @property
     def is_empty(self) -> bool:

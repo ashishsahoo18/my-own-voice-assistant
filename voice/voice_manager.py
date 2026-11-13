@@ -14,6 +14,7 @@ from voice.language import VoiceLanguage
 from voice.listener import VoiceListener
 from voice.speaker import VoiceSpeaker
 from voice.states import VoiceState, VoiceStateMachine
+from voice.stt.base import TranscriptionResult
 from voice.wakeword import WakeWordDetector
 
 
@@ -37,6 +38,7 @@ class VoiceManager:
 
         self.state_machine = VoiceStateMachine(initial_state=VoiceState.READY, logger=self.logger)
         self.settings = self._load_settings()
+        self.last_transcription_result: Optional[TranscriptionResult] = None
 
         # Modular components
         fallback_allowed = bool(self.settings.get("fallback_external_allowed", True))
@@ -107,21 +109,25 @@ class VoiceManager:
         if self.state_machine.current_state == VoiceState.SPEAKING:
             self.state_machine.transition_to(VoiceState.READY, detail="barge_in")
 
-    def listen_once(
+    def listen_once_result(
         self,
         status_callback: Optional[StatusCallback] = None,
         timeout: int = 10,
         phrase_time_limit: Optional[int] = 15,
         silence_timeout: float = 1.0,
-    ) -> str:
-        """Capture user speech once, performing safe barge-in and state transitions."""
+    ) -> TranscriptionResult:
+        """Capture user speech once and return structured TranscriptionResult metadata."""
         if not self.settings.get("voice_enabled", True):
-            return ""
+            res = TranscriptionResult(text="", confidence=0.0, engine="disabled", confidence_available=True)
+            self.last_transcription_result = res
+            return res
 
         with self._lock:
             if self._is_listening:
                 self.logger.warning("Voice listening already active; ignoring duplicate session request.")
-                return ""
+                res = TranscriptionResult(text="", confidence=0.0, engine="busy", confidence_available=True)
+                self.last_transcription_result = res
+                return res
             self._is_listening = True
 
         # Safe barge-in: stop any active speech output before opening the microphone
@@ -139,22 +145,52 @@ class VoiceManager:
                 status_callback(st)
 
         try:
-            text = self.listener.listen_once(
+            result = self.listener.listen_once_result(
                 timeout=timeout,
                 phrase_time_limit=phrase_time_limit,
                 silence_timeout=silence_timeout,
                 status_callback=wrapped_status_cb,
             )
-            self.logger.info("Voice listening completed (recognized: '%s')", text)
+            self.last_transcription_result = result
+            self.logger.info(
+                "Voice listening completed (recognized: '%s', confidence=%s, available=%s)",
+                result.text,
+                result.confidence,
+                result.confidence_available,
+            )
             self.state_machine.transition_to(VoiceState.READY)
-            return text
+            return result
         except Exception as exc:
             self.logger.error("Voice recognition error: %s", exc)
             self.state_machine.transition_to(VoiceState.ERROR, detail=str(exc))
-            return ""
+            res = TranscriptionResult(
+                text="",
+                confidence=0.0,
+                engine="error",
+                details={"error": str(exc)},
+                confidence_available=True,
+            )
+            self.last_transcription_result = res
+            return res
         finally:
             with self._lock:
                 self._is_listening = False
+
+    def listen_once(
+        self,
+        status_callback: Optional[StatusCallback] = None,
+        timeout: int = 10,
+        phrase_time_limit: Optional[int] = 15,
+        silence_timeout: float = 1.0,
+    ) -> str:
+        """Capture user speech once, performing safe barge-in and state transitions."""
+        result = self.listen_once_result(
+            status_callback=status_callback,
+            timeout=timeout,
+            phrase_time_limit=phrase_time_limit,
+            silence_timeout=silence_timeout,
+        )
+        return result.text.strip()
 
     def speak(self, text: str, wait: bool = False) -> None:
         """Speak text aloud using the configured TTS engine."""

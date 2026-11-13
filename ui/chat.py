@@ -235,6 +235,21 @@ class CommandConsolePanel(ctk.CTkFrame):
         except Exception:
             pass
 
+        # Central Backend Integration (Phase 2A)
+        from core.config import get_config
+        self.config = get_config()
+        self.backend_client = None
+        self._active_conversation_id = None
+        try:
+            from desktop.api_client import OLIVERBackendClient
+            self.backend_client = OLIVERBackendClient(
+                base_url=self.config.backend.backend_url,
+                connect_timeout=self.config.backend.connect_timeout_seconds,
+                read_timeout=self.config.backend.read_timeout_seconds,
+            )
+        except Exception:
+            pass
+
         self._build_ui()
         self._load_history()
 
@@ -457,6 +472,51 @@ class CommandConsolePanel(ctk.CTkFrame):
                 self.event_bridge.post(self._set_state, "KILLED")
                 return
 
+            # Backend Console Command Interception (Phase 2A)
+            clean_cmd = command.strip()
+            if self.backend_client and (clean_cmd.lower().startswith("/backend") or clean_cmd.lower().startswith("backend ")):
+                parts = clean_cmd.split(maxsplit=3)
+                subcmd = parts[1].lower() if len(parts) > 1 else "status"
+
+                if subcmd == "login" and len(parts) >= 4:
+                    email_arg = parts[2]
+                    pwd_arg = parts[3]
+                    try:
+                        self.backend_client.login(email_arg, pwd_arg)
+                        msg = f"Logged in successfully to OLIVER backend as {email_arg}."
+                        st = "VERIFIED"
+                    except Exception as exc:
+                        msg = f"Backend login failed: {exc}"
+                        st = "FAILED"
+                    self.event_bridge.post(self._log_console_entry, command, "AUTH", msg, st, None)
+                    self._speak_confirmation(msg)
+                    self.event_bridge.post(self._set_state, "READY")
+                    return
+                elif subcmd == "logout":
+                    try:
+                        self.backend_client.logout()
+                        msg = "Logged out from OLIVER backend. Credentials cleared."
+                        st = "VERIFIED"
+                    except Exception as exc:
+                        msg = f"Backend logout error: {exc}"
+                        st = "FAILED"
+                    self.event_bridge.post(self._log_console_entry, command, "AUTH", msg, st, None)
+                    self._speak_confirmation(msg)
+                    self.event_bridge.post(self._set_state, "READY")
+                    return
+                elif subcmd == "status":
+                    try:
+                        healthy, data = self.backend_client.check_health()
+                        user = self.backend_client.auth.user_email or "Not logged in"
+                        msg = f"Backend Health: {'ONLINE' if healthy else 'OFFLINE'} | Auth User: {user} | Mode: {self.config.backend.backend_mode.upper()}"
+                        st = "VERIFIED" if healthy else "FAILED"
+                    except Exception as exc:
+                        msg = f"Backend status check error: {exc}"
+                        st = "FAILED"
+                    self.event_bridge.post(self._log_console_entry, command, "SYSTEM", msg, st, None)
+                    self.event_bridge.post(self._set_state, "READY")
+                    return
+
             # Check if this command is an AI Q&A question that can stream directly
             is_ai_streamable = False
             if hasattr(self.assistant, "oliver_router") and self.assistant.oliver_router is not None:
@@ -466,6 +526,76 @@ class CommandConsolePanel(ctk.CTkFrame):
             elif hasattr(self.assistant, "router") and hasattr(self.assistant.router, "_is_ai_question"):
                 if self.assistant.router._is_ai_question(command.lower()):
                     is_ai_streamable = True
+
+            if is_ai_streamable:
+                # Check if backend mode is active and authenticated
+                use_backend = (
+                    self.config.backend.backend_mode == "backend"
+                    and self.backend_client is not None
+                    and self.backend_client.auth.is_authenticated
+                )
+
+                if use_backend:
+                    from desktop.api_client.exceptions import (
+                        AmbiguousTimeoutError,
+                        AuthenticationError,
+                        BackendConnectionError,
+                    )
+
+                    entry_ref: list[Optional[CommandConsoleEntry]] = [None]
+                    def _init_backend_entry():
+                        entry_ref[0] = self._log_console_entry(
+                            command,
+                            "AI",
+                            "Connecting to OLIVER Backend...",
+                            "UNVERIFIED",
+                            None,
+                        )
+                    self.event_bridge.post(_init_backend_entry)
+
+                    try:
+                        resp = self.backend_client.chat(
+                            command,
+                            conversation_id=self._active_conversation_id,
+                            request_id=request_id,
+                        )
+                        reply_text = resp.get("reply", "")
+                        self._active_conversation_id = resp.get("conversation_id")
+                        status = "VERIFIED"
+                    except BackendConnectionError:
+                        if self.config.backend.auto_fallback_local:
+                            reply_text = self.assistant.ai_service.ask(command)
+                            status = "FALLBACK_LOCAL"
+                        else:
+                            reply_text = "Backend server unreachable and local fallback disabled."
+                            status = "FAILED"
+                    except AmbiguousTimeoutError:
+                        reconciled = self.backend_client.reconcile_conversation(
+                            self._active_conversation_id, request_id
+                        )
+                        if reconciled:
+                            reply_text = reconciled.get("content", "")
+                            status = "VERIFIED"
+                        else:
+                            reply_text = "Backend processing timed out on client. Please wait or retry to reconcile."
+                            status = "PENDING"
+                    except AuthenticationError as auth_err:
+                        reply_text = f"Authentication error: {auth_err}. Please log in via `/backend login`."
+                        status = "AUTH_REQUIRED"
+                    except Exception as exc:
+                        reply_text = f"Backend error: {exc}"
+                        status = "FAILED"
+
+                    if not get_kill_switch().is_active and reply_text:
+                        self.voice_manager.speak(reply_text, wait=False)
+
+                    if entry_ref[0] is not None:
+                        self.event_bridge.post(entry_ref[0].update_action_text, reply_text)
+                        self.event_bridge.post(entry_ref[0].update_status, status)
+                        self.event_bridge.post(self._scroll_to_bottom)
+
+                    self.event_bridge.post(self._set_state, "READY")
+                    return
 
             if is_ai_streamable and hasattr(self.assistant, "ai_service") and hasattr(self.assistant.ai_service, "ask_stream"):
                 entry_ref: list[Optional[CommandConsoleEntry]] = [None]

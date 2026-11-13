@@ -654,6 +654,7 @@ class AshishApp(ctk.CTk):
             ("RAM", "0%"),
             ("BATTERY", "Checking"),
             ("NETWORK", "ONLINE"),
+            ("BACKEND", "LOCAL"),
             ("OLLAMA", "CHECKING"),
             ("VOICE", "READY"),
             ("MIC PRIVACY", "MIC: CLOSED"),
@@ -1055,7 +1056,26 @@ class AshishApp(ctk.CTk):
             ks_status = "ENGAGED" if ks_active else "STANDBY"
             ks_color = "#EF4444" if ks_active else "#10B981"
 
+            # 6. Central Backend Status (Phase 2A)
+            from core.config import get_config
+            cfg = get_config()
+            if cfg.backend.backend_mode == "backend":
+                try:
+                    from desktop.api_client import OLIVERBackendClient
+                    probe_client = OLIVERBackendClient(base_url=cfg.backend.backend_url, connect_timeout=1.0)
+                    healthy, _ = probe_client.check_health()
+                    probe_client.close()
+                    backend_status = "ONLINE" if healthy else "OFFLINE"
+                    backend_color = "#10B981" if healthy else "#F59E0B"
+                except Exception:
+                    backend_status = "OFFLINE"
+                    backend_color = "#F59E0B"
+            else:
+                backend_status = "LOCAL"
+                backend_color = "#64748B"
+
             telemetry_data = {
+                "BACKEND": (backend_status, backend_color),
                 "OLLAMA": (ollama_status, ollama_color),
                 "VOICE": (voice_state, voice_color),
                 "MIC PRIVACY": (mic_status, mic_color),

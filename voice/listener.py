@@ -49,14 +49,14 @@ class VoiceListener:
         """Backward-compatible access to underlying microphone instance."""
         return self.capture.get_microphone()
 
-    def listen_once(
+    def listen_once_result(
         self,
         timeout: int = 10,
         phrase_time_limit: Optional[int] = 15,
         silence_timeout: float = 1.0,
         status_callback: Optional[StatusCallback] = None,
-    ) -> str:
-        """Capture speech once and return recognized text."""
+    ) -> TranscriptionResult:
+        """Capture speech once and return canonical structured TranscriptionResult."""
         self.recognizer.pause_threshold = silence_timeout
 
         try:
@@ -70,7 +70,9 @@ class VoiceListener:
         except sr.WaitTimeoutError:
             self._log_warning("Voice listening timed out; no speech detected")
             self._notify(status_callback, "No speech detected")
-            return ""
+            res = TranscriptionResult(text="", confidence=0.0, engine=self.stt_engine.name, confidence_available=True)
+            self.last_result = res
+            return res
         except (MicrophoneError, OSError) as exc:
             self._log_error("Microphone hardware error: %s", exc)
             self._notify(status_callback, "Microphone error")
@@ -80,17 +82,54 @@ class VoiceListener:
             self._notify(status_callback, "Error")
             raise RuntimeError(f"Unable to access microphone: {exc}") from exc
 
-        return self._recognize_audio(audio)
-
-    def _recognize_audio(self, audio: sr.AudioData) -> str:
-        """Recognize captured audio data using configured STT engine."""
         try:
             result = self.stt_engine.transcribe(audio, language=self.language)
             self.last_result = result
-            # Reject extremely uncertain / low-confidence garbled acoustic matches
+            return result
+        except Exception as exc:
+            self._log_error("Speech recognition failed: %s", exc)
+            raise RuntimeError(f"Speech recognition unavailable: {exc}") from exc
+
+    def listen_once(
+        self,
+        timeout: int = 10,
+        phrase_time_limit: Optional[int] = 15,
+        silence_timeout: float = 1.0,
+        status_callback: Optional[StatusCallback] = None,
+    ) -> str:
+        """Capture speech once and return recognized text (backward-compatible plain string)."""
+        result = self.listen_once_result(
+            timeout=timeout,
+            phrase_time_limit=phrase_time_limit,
+            silence_timeout=silence_timeout,
+            status_callback=status_callback,
+        )
+
+        # Reject extremely uncertain / low-confidence garbled acoustic matches only when confidence is available
+        if result.confidence_available and result.confidence is not None:
             if result.confidence < 0.25 and result.text:
-                self.logger.warning("STT produced low-confidence transcript (%.2f): '%s'; ignoring", result.confidence, result.text)
+                self.logger.warning(
+                    "STT produced low-confidence transcript (%.2f): '%s'; ignoring",
+                    result.confidence,
+                    result.text,
+                )
                 return ""
+
+        return result.text.strip()
+
+    def _recognize_audio(self, audio: sr.AudioData) -> str:
+        """Recognize captured audio data using configured STT engine (backward compatibility helper)."""
+        try:
+            result = self.stt_engine.transcribe(audio, language=self.language)
+            self.last_result = result
+            if result.confidence_available and result.confidence is not None:
+                if result.confidence < 0.25 and result.text:
+                    self.logger.warning(
+                        "STT produced low-confidence transcript (%.2f): '%s'; ignoring",
+                        result.confidence,
+                        result.text,
+                    )
+                    return ""
             return result.text.strip()
         except Exception as exc:
             self._log_error("Speech recognition failed: %s", exc)

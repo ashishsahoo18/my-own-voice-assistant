@@ -165,8 +165,40 @@ class BrowserSkill(BaseSkill):
             error=res.message if res.status == "FAILED" else None,
         )
 
-    def ask_page(self, question: str, url: Optional[str] = None) -> ToolResult:
-        res = self.service.ask_page(question=question, url=url)
+    def ask_page(
+        self,
+        question: Optional[str] = None,
+        url: Optional[str] = None,
+        query: Optional[str] = None,
+        **kwargs: Any,
+    ) -> ToolResult:
+        # Reject any unsupported extra arguments
+        if kwargs:
+            unexpected = ", ".join(sorted(kwargs.keys()))
+            return ToolResult(
+                status="FAILED",
+                message=f"BrowserSkill.ask_page received unexpected argument(s): {unexpected}",
+                error=f"UnexpectedArgument: {unexpected}",
+            )
+
+        # Handle conflicting question and query arguments
+        if question is not None and query is not None and question != query:
+            return ToolResult(
+                status="FAILED",
+                message="Conflicting arguments: both 'question' and 'query' were provided with different values.",
+                error="ConflictingArguments: question and query differ",
+            )
+
+        resolved_question = question if question is not None else query
+        if resolved_question is None or not isinstance(resolved_question, str) or not resolved_question.strip():
+            error_type = "InvalidType" if resolved_question is not None and not isinstance(resolved_question, str) else "MissingArgument"
+            return ToolResult(
+                status="FAILED",
+                message="Missing or invalid required argument: 'question' must be a non-empty string for browser.ask_page.",
+                error=f"{error_type}: question must be a non-empty string",
+            )
+
+        res = self.service.ask_page(question=resolved_question.strip(), url=url)
         return ToolResult(
             status=res.status,
             message=res.message,
