@@ -6,7 +6,11 @@
   "speech_rate": 185,
   "volume": 1.0,
   "language": "en",
-  "wake_word": "hey Ashish",
+  "wake_word": "hey oliver",
+  "wake_phrases": [
+    "hey oliver",
+    "hello oliver"
+  ],
   "wake_word_enabled": true,
   "push_to_talk_enabled": true,
   "fallback_external_allowed": true
