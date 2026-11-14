@@ -58,6 +58,7 @@ class VoiceManager:
 
         self.wake_detector = WakeWordDetector(
             wake_word=str(self.settings.get("wake_word", "hey oliver")),
+            wake_phrases=self.settings.get("wake_phrases"),
             logger=self.logger,
             language=self._recognition_language,
         )
@@ -73,6 +74,29 @@ class VoiceManager:
     def is_microphone_active(self) -> bool:
         """True if microphone hardware is currently open and active."""
         return self.listener.capture.is_active
+
+    @property
+    def stt_engine_name(self) -> str:
+        """Return the active primary STT engine name."""
+        if hasattr(self.listener, "stt_engine"):
+            engine = self.listener.stt_engine
+            if hasattr(engine, "local_engine"):
+                return "Vosk"
+            if hasattr(engine, "name"):
+                return "Vosk" if "vosk" in str(engine.name).lower() else str(engine.name).capitalize()
+        return "Vosk"
+
+    @property
+    def is_stt_available(self) -> bool:
+        """Return True if the underlying STT engine is initialized and available."""
+        if not self.settings.get("voice_enabled", True):
+            return False
+        if hasattr(self.listener, "stt_engine") and hasattr(self.listener.stt_engine, "is_available"):
+            try:
+                return bool(self.listener.stt_engine.is_available())
+            except Exception:
+                return False
+        return True
 
     @property
     def _recognition_language(self) -> str:
@@ -133,6 +157,31 @@ class VoiceManager:
         # Safe barge-in: stop any active speech output before opening the microphone
         self.barge_in()
 
+        # Stage 2E Condition 1: Pause background wake-word capture and verify hardware release
+        wake_was_paused = False
+        if hasattr(self, "wake_detector") and self.wake_detector is not None:
+            try:
+                paused_ok = self.wake_detector.pause(timeout=2.0)
+                if not paused_ok:
+                    self.logger.warning(
+                        "Could not confirm wake word microphone release within timeout; failing safely to prevent stream conflict"
+                    )
+                    with self._lock:
+                        self._is_listening = False
+                    self.wake_detector.resume()
+                    res = TranscriptionResult(
+                        text="",
+                        confidence=0.0,
+                        engine="mic_busy",
+                        details={"error": "Microphone release timeout"},
+                        confidence_available=False,
+                    )
+                    self.last_transcription_result = res
+                    return res
+                wake_was_paused = True
+            except Exception as exc:
+                self.logger.error("Error pausing wake word detector: %s", exc)
+
         self.state_machine.transition_to(VoiceState.LISTENING)
         self.logger.info("Voice listening started (timeout=%ss, phrase_limit=%ss)", timeout, phrase_time_limit)
 
@@ -173,6 +222,11 @@ class VoiceManager:
             self.last_transcription_result = res
             return res
         finally:
+            if wake_was_paused:
+                try:
+                    self.wake_detector.resume()
+                except Exception as exc:
+                    self.logger.error("Error resuming wake word detector: %s", exc)
             with self._lock:
                 self._is_listening = False
 
@@ -232,6 +286,17 @@ class VoiceManager:
         """Stop wake-word detection."""
         self.wake_detector.stop()
 
+    def pause_wake_word(self, timeout: float = 2.0) -> bool:
+        """Pause background wake-word detection (e.g. for PTT or external audio)."""
+        if hasattr(self, "wake_detector") and self.wake_detector is not None:
+            return self.wake_detector.pause(timeout=timeout)
+        return True
+
+    def resume_wake_word(self, force: bool = False) -> None:
+        """Resume background wake-word detection."""
+        if hasattr(self, "wake_detector") and self.wake_detector is not None:
+            self.wake_detector.resume(force=force)
+
     def stop_speaking(self) -> None:
         """Stop current speech output."""
         self.barge_in()
@@ -244,11 +309,24 @@ class VoiceManager:
         """Set recognition language."""
         self.save_settings(language=language)
 
+    @property
+    def wake_phrases(self) -> list[str]:
+        """Return currently configured wake phrases (Stage 2D)."""
+        return list(self.wake_detector.wake_phrases)
+
+    def set_wake_phrases(self, wake_phrases: Any) -> None:
+        """Set dual or multiple wake phrases (Stage 2D)."""
+        self.wake_detector.set_wake_phrases(wake_phrases)
+        phrases = list(self.wake_detector.wake_phrases)
+        self.save_settings(wake_phrases=phrases, wake_word=phrases[0])
+
     def set_wake_word(self, wake_word: str) -> None:
-        """Set wake word."""
+        """Set primary wake word."""
         clean_wake_word = wake_word.strip().lower()
         if clean_wake_word:
-            self.save_settings(wake_word=clean_wake_word)
+            self.wake_detector.set_wake_word(clean_wake_word)
+            phrases = list(self.wake_detector.wake_phrases)
+            self.save_settings(wake_word=clean_wake_word, wake_phrases=phrases)
 
     def enable_voice(self, enabled: bool) -> None:
         """Enable or disable all voice features."""
@@ -311,6 +389,7 @@ class VoiceManager:
             "volume": 1.0,
             "language": "en",
             "wake_word": "hey oliver",
+            "wake_phrases": ["hey oliver", "hello oliver"],
             "wake_word_enabled": True,
             "push_to_talk_enabled": True,
             "fallback_external_allowed": True,
@@ -323,5 +402,10 @@ class VoiceManager:
         self.speaker.set_rate(int(self.settings.get("speech_rate", 170)))
         self.speaker.set_volume(float(self.settings.get("volume", 1.0)))
         self.speaker.set_voice(str(self.settings.get("voice_id") or ""))
-        self.wake_detector.set_wake_word(str(self.settings.get("wake_word", "hey oliver")))
+        raw_phrases = self.settings.get("wake_phrases")
+        if raw_phrases:
+            self.wake_detector.set_wake_phrases(raw_phrases)
+        else:
+            primary = str(self.settings.get("wake_word", "hey oliver"))
+            self.wake_detector.set_wake_phrases([primary, "hello oliver"])
         self.wake_detector.language = self._recognition_language

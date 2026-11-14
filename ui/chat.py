@@ -13,6 +13,14 @@ import customtkinter as ctk
 from ai.assistant import AshishAssistant
 from database.chat_db import ChatStore
 from ui.event_bridge import UIEventQueue
+from ui.telemetry_utils import (
+    format_confidence,
+    format_stt_engine,
+    format_stt_latency,
+    get_confidence_color,
+    get_status_color,
+)
+from voice.stt.base import TranscriptionResult
 from voice.voice_manager import VoiceManager
 
 
@@ -225,11 +233,19 @@ class CommandConsolePanel(ctk.CTkFrame):
         self.status_var = ctk.StringVar(value="READY")
         self.transcript_var = ctk.StringVar(value="Awaiting command...")
 
+        # Live Voice Telemetry StringVars (Stage 2B)
+        initial_engine = getattr(self.voice_manager, "stt_engine_name", "Vosk")
+        is_avail = getattr(self.voice_manager, "is_stt_available", True)
+        self.telemetry_engine_var = ctk.StringVar(value=f"STT Engine: {format_stt_engine(initial_engine)}")
+        self.telemetry_status_var = ctk.StringVar(value="Status: READY" if is_avail else "Status: UNAVAILABLE")
+        self.telemetry_conf_var = ctk.StringVar(value="Confidence: N/A")
+        self.telemetry_latency_var = ctk.StringVar(value="STT Latency: N/A")
+
         # Register voice state listener for observable HUD state changes via bridge
         try:
             self.voice_manager.add_state_listener(
                 lambda st, detail: self.event_bridge.post(
-                    self._set_state, st.value if hasattr(st, "value") else str(st)
+                    self._on_voice_state_transition, st, detail
                 )
             )
         except Exception:
@@ -247,6 +263,13 @@ class CommandConsolePanel(ctk.CTkFrame):
                 connect_timeout=self.config.backend.connect_timeout_seconds,
                 read_timeout=self.config.backend.read_timeout_seconds,
             )
+        except Exception:
+            pass
+
+        # Register global browser confirmation callback (Stage 2C)
+        try:
+            from commands.browser import set_browser_confirmation_callback
+            set_browser_confirmation_callback(self._browser_url_confirmation_callback)
         except Exception:
             pass
 
@@ -287,31 +310,80 @@ class CommandConsolePanel(ctk.CTkFrame):
         self.console_feed.grid(row=1, column=0, sticky="nsew", padx=16, pady=(0, 10))
         self.console_feed.grid_columnconfigure(0, weight=1)
 
-        # Voice Transcript Box
-        transcript_box = ctk.CTkFrame(
+        # Voice Telemetry HUD & Speech Transcript Box (Stage 2B)
+        self.telemetry_box = ctk.CTkFrame(
             self,
             fg_color="#091224",
             corner_radius=12,
             border_width=1,
             border_color="#182a4a",
         )
-        transcript_box.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 10))
-        transcript_box.grid_columnconfigure(0, weight=1)
+        self.telemetry_box.grid(row=2, column=0, sticky="ew", padx=16, pady=(0, 10))
+        self.telemetry_box.grid_columnconfigure(0, weight=1)
+        self.telemetry_box.grid_columnconfigure(1, weight=1)
+
+        # Header strip: "VOICE TELEMETRY" and "STT Engine: Vosk"
+        telemetry_header = ctk.CTkFrame(self.telemetry_box, fg_color="transparent")
+        telemetry_header.grid(row=0, column=0, columnspan=2, sticky="ew", padx=12, pady=(6, 2))
+        telemetry_header.grid_columnconfigure(0, weight=1)
 
         ctk.CTkLabel(
-            transcript_box,
-            text="SPEECH TRANSCRIPT",
+            telemetry_header,
+            text="VOICE TELEMETRY",
             font=("Segoe UI", 9, "bold"),
             text_color="#00d2ff",
-        ).grid(row=0, column=0, sticky="w", padx=12, pady=(6, 0))
+        ).grid(row=0, column=0, sticky="w")
 
+        self.telemetry_engine_lbl = ctk.CTkLabel(
+            telemetry_header,
+            textvariable=self.telemetry_engine_var,
+            font=("Segoe UI", 9, "bold"),
+            text_color="#36b6ff",
+        )
+        self.telemetry_engine_lbl.grid(row=0, column=1, sticky="e")
+
+        # Telemetry metrics row: Status, Confidence, Latency
+        metrics_row = ctk.CTkFrame(self.telemetry_box, fg_color="transparent")
+        metrics_row.grid(row=1, column=0, columnspan=2, sticky="ew", padx=12, pady=(0, 2))
+        metrics_row.grid_columnconfigure(0, weight=1)
+        metrics_row.grid_columnconfigure(1, weight=1)
+        metrics_row.grid_columnconfigure(2, weight=1)
+
+        self.telemetry_status_lbl = ctk.CTkLabel(
+            metrics_row,
+            textvariable=self.telemetry_status_var,
+            font=("Segoe UI", 10, "bold"),
+            text_color=get_status_color(self.telemetry_status_var.get()),
+            anchor="w",
+        )
+        self.telemetry_status_lbl.grid(row=0, column=0, sticky="w")
+
+        self.telemetry_conf_lbl = ctk.CTkLabel(
+            metrics_row,
+            textvariable=self.telemetry_conf_var,
+            font=("Segoe UI", 10),
+            text_color="#cbd5e1",
+            anchor="center",
+        )
+        self.telemetry_conf_lbl.grid(row=0, column=1, sticky="ew")
+
+        self.telemetry_latency_lbl = ctk.CTkLabel(
+            metrics_row,
+            textvariable=self.telemetry_latency_var,
+            font=("Segoe UI", 10),
+            text_color="#cbd5e1",
+            anchor="e",
+        )
+        self.telemetry_latency_lbl.grid(row=0, column=2, sticky="e")
+
+        # Speech Transcript / Last Recognition display row
         ctk.CTkLabel(
-            transcript_box,
+            self.telemetry_box,
             textvariable=self.transcript_var,
             font=("Segoe UI", 11),
             text_color="#ffffff",
             anchor="w",
-        ).grid(row=1, column=0, sticky="ew", padx=12, pady=(2, 8))
+        ).grid(row=2, column=0, columnspan=2, sticky="ew", padx=12, pady=(2, 8))
 
         # Quick Commands Bar
         self._build_quick_commands_bar()
@@ -843,6 +915,63 @@ class CommandConsolePanel(ctk.CTkFrame):
             self._confirmation_in_flight = False
             self._request_in_flight = False
 
+    def _browser_url_confirmation_callback(self, url: str, display_host: str) -> bool:
+        """Thread-safe URL confirmation handler called from background assistant thread (Stage 2C)."""
+        result_event = threading.Event()
+        user_confirmed = [False]
+
+        def on_confirm():
+            user_confirmed[0] = True
+            result_event.set()
+
+        def on_cancel():
+            user_confirmed[0] = False
+            result_event.set()
+
+        self.event_bridge.post(
+            self._show_browser_url_confirmation_dialog,
+            url,
+            display_host,
+            on_confirm,
+            on_cancel,
+        )
+
+        # Wait with 60s timeout; defaults to False (fail safe) on timeout
+        result_event.wait(timeout=60.0)
+        return user_confirmed[0]
+
+    def _show_browser_url_confirmation_dialog(
+        self,
+        url: str,
+        display_host: str,
+        on_confirm,
+        on_cancel,
+    ) -> None:
+        """Display website open confirmation dialog strictly on Tkinter main thread (Stage 2C)."""
+        if not self.request_confirmation:
+            on_cancel()
+            return
+
+        if hasattr(self, "voice_manager") and self.voice_manager:
+            try:
+                self.voice_manager.speak(f"Confirmation required to open {display_host}.")
+            except Exception:
+                pass
+
+        self.request_confirmation(
+            title="Website Navigation Confirmation",
+            message=(
+                f"OLIVER received a request to navigate to an external website:\n\n"
+                f"Host: {display_host}\n"
+                f"URL: {url}\n\n"
+                f"Do you want to open this website in Mozilla Firefox?"
+            ),
+            on_confirm=on_confirm,
+            on_cancel=on_cancel,
+            confirm_text="OPEN IN FIREFOX",
+            accent_color="#ff9500",
+        )
+
     def _speak_confirmation(self, reply: str) -> None:
         self.voice_manager.speak(reply)
 
@@ -932,29 +1061,121 @@ class CommandConsolePanel(ctk.CTkFrame):
             None,
         )
 
+    def _on_voice_state_transition(self, st: Any, detail: Optional[str] = None) -> None:
+        """Handle voice state machine updates and update live HUD telemetry."""
+        state_str = st.value if hasattr(st, "value") else str(st)
+        self._set_state(state_str)
+        self.update_voice_telemetry(status=state_str)
+
+    def update_voice_telemetry(
+        self,
+        result: Optional[TranscriptionResult] = None,
+        status: Optional[str] = None,
+        transcript: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Thread-safe voice telemetry update gateway; dispatches safely to main thread."""
+        main_thread_id = getattr(self.event_bridge, "_main_thread_id", None)
+        if main_thread_id is not None and threading.get_ident() != main_thread_id:
+            self.event_bridge.post(self.update_voice_telemetry, result, status, transcript, error)
+            return
+
+        self._apply_voice_telemetry(result=result, status=status, transcript=transcript, error=error)
+
+    def _apply_voice_telemetry(
+        self,
+        result: Optional[TranscriptionResult] = None,
+        status: Optional[str] = None,
+        transcript: Optional[str] = None,
+        error: Optional[str] = None,
+    ) -> None:
+        """Apply voice telemetry updates directly to UI widgets on the main GUI thread."""
+        if transcript is not None:
+            self.transcript_var.set(transcript)
+
+        if status is not None:
+            clean_st = status.replace("Status:", "").strip().upper()
+            self.telemetry_status_var.set(f"Status: {clean_st}")
+            if hasattr(self, "telemetry_status_lbl"):
+                try:
+                    self.telemetry_status_lbl.configure(text_color=get_status_color(clean_st))
+                except Exception:
+                    pass
+
+        if error:
+            self.telemetry_status_var.set("Status: ERROR")
+            self.telemetry_conf_var.set("Confidence: N/A")
+            self.telemetry_latency_var.set("STT Latency: N/A")
+            if hasattr(self, "telemetry_status_lbl"):
+                try:
+                    self.telemetry_status_lbl.configure(text_color=get_status_color("ERROR"))
+                except Exception:
+                    pass
+            return
+
+        if result is not None:
+            # 1. STT Engine
+            engine_str = format_stt_engine(getattr(result, "engine", "vosk"))
+            self.telemetry_engine_var.set(f"STT Engine: {engine_str}")
+
+            # 2. Confidence
+            conf_val = getattr(result, "confidence", None)
+            conf_avail = getattr(result, "confidence_available", True)
+            text_val = getattr(result, "text", "")
+            conf_display = format_confidence(conf_val, conf_avail, text=text_val)
+            self.telemetry_conf_var.set(f"Confidence: {conf_display}")
+            if hasattr(self, "telemetry_conf_lbl"):
+                try:
+                    self.telemetry_conf_lbl.configure(text_color=get_confidence_color(conf_val, conf_avail, text=text_val))
+                except Exception:
+                    pass
+
+            # 3. Latency
+            lat_val = getattr(result, "latency_s", None)
+            lat_display = format_stt_latency(lat_val)
+            self.telemetry_latency_var.set(f"STT Latency: {lat_display}")
+
     def _handle_voice_input(self) -> None:
         try:
-            self.event_bridge.post(self.transcript_var.set, "Listening for speech...")
+            self.update_voice_telemetry(
+                status="LISTENING",
+                transcript="Listening through microphone...",
+            )
 
             def on_status(st: str) -> None:
                 if st.lower() == "listening":
-                    self.event_bridge.post(self.transcript_var.set, "Listening through microphone...")
+                    self.update_voice_telemetry(
+                        status="LISTENING",
+                        transcript="Listening through microphone...",
+                    )
                     self.event_bridge.post(self._set_state, "LISTENING")
                 elif st.lower() == "processing":
-                    self.event_bridge.post(self.transcript_var.set, "Processing recognized speech...")
+                    self.update_voice_telemetry(
+                        status="PROCESSING",
+                        transcript="Processing recognized speech...",
+                    )
                     self.event_bridge.post(self._set_state, "PROCESSING")
 
             text = self.voice_manager.listen_once(status_callback=on_status)
+            last_res = getattr(self.voice_manager, "last_transcription_result", None)
+            self.update_voice_telemetry(result=last_res, status="READY")
         except Exception as exc:
             print("Voice recognition error:", repr(exc))
-            self.event_bridge.post(self.transcript_var.set, "Microphone access error. Please check permissions.")
+            self.update_voice_telemetry(
+                error=str(exc),
+                transcript="Microphone access error. Please check permissions.",
+            )
             self.event_bridge.post(self._set_state, "READY")
             return
         finally:
             self._voice_listening_in_flight = False
 
         if not text:
-            self.event_bridge.post(self.transcript_var.set, "Speech not understood. Please speak clearly.")
+            self.update_voice_telemetry(
+                result=getattr(self.voice_manager, "last_transcription_result", None),
+                status="READY",
+                transcript="Speech not understood. Please speak clearly.",
+            )
             self.voice_manager.speak("I couldn't quite hear or understand that. Could you please repeat?")
             self.event_bridge.post(self._set_state, "READY")
             return
