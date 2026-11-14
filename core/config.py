@@ -60,7 +60,14 @@ class VoiceSettings(BaseModel):
         default_factory=lambda: os.getenv("WAKE_WORD", "hey oliver").strip().lower()
     )
     wake_word_alias: str = Field(
-        default_factory=lambda: os.getenv("WAKE_WORD_ALIAS", "hey ashish").strip().lower()
+        default_factory=lambda: os.getenv("WAKE_WORD_ALIAS", "hello oliver").strip().lower()
+    )
+    wake_phrases: list[str] = Field(
+        default_factory=lambda: [
+            p.strip().lower()
+            for p in os.getenv("WAKE_PHRASES", "hey oliver,hello oliver").split(",")
+            if p.strip()
+        ]
     )
     auto_speaking: bool = Field(
         default_factory=lambda: os.getenv("AUTO_SPEAKING", "true").strip().lower() in {"1", "true", "yes", "on"}
