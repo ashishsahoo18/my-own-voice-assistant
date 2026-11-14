@@ -7,11 +7,27 @@ import logging
 import os
 import re
 import shutil
+from typing import Callable, Optional
 import urllib.parse
 from urllib.parse import quote_plus
 import webbrowser
 
+from browser.url_trust import URLTrustLevel, classify_url
+
 logger = logging.getLogger("oliver.commands.browser")
+
+_global_browser_confirmation_callback: Optional[Callable[[str, str], bool]] = None
+
+
+def set_browser_confirmation_callback(callback: Optional[Callable[[str, str], bool]]) -> None:
+    """Register a global confirmation callback for website navigation."""
+    global _global_browser_confirmation_callback
+    _global_browser_confirmation_callback = callback
+
+
+def get_browser_confirmation_callback() -> Optional[Callable[[str, str], bool]]:
+    """Return the currently registered global browser confirmation callback."""
+    return _global_browser_confirmation_callback
 
 
 class BrowserCommands:
@@ -19,7 +35,13 @@ class BrowserCommands:
 
     PORTFOLIO_URL = "https://ashishsahoo.vercel.app/"
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        confirmation_callback: Optional[Callable[[str, str], bool]] = None,
+        require_confirmation: bool = True,
+    ) -> None:
+        self.confirmation_callback = confirmation_callback
+        self.require_confirmation = require_confirmation
         self.sites: dict[str, str] = {
             # Portfolio aliases
             "portfolio": self.PORTFOLIO_URL,
@@ -121,60 +143,78 @@ class BrowserCommands:
 
         return None
 
+    def _get_trusted_domains(self) -> tuple[set[str], set[str]]:
+        """Extract trusted root domains and exact hostnames from configured sites."""
+        roots: set[str] = set()
+        exacts: set[str] = set()
+        for site_url in self.sites.values():
+            try:
+                p = urllib.parse.urlparse(site_url)
+                h = (p.hostname or "").lower()
+                if not h:
+                    continue
+                if "vercel.app" in h:
+                    exacts.add(h)
+                else:
+                    parts = h.split(".")
+                    if len(parts) >= 2:
+                        roots.add(".".join(parts[-2:]))
+                    else:
+                        roots.add(h)
+            except Exception:
+                continue
+        return roots, exacts
+
     def _is_safe_url(self, url: str) -> tuple[bool, str]:
-        """Validate URL safety using urllib.parse and ipaddress.
+        """Validate URL safety using conservative classification.
         
         Requires HTTP/HTTPS, valid hostname, rejects credentials, localhost, and private/restricted IPs.
         """
-        clean = (url or "").strip()
-        if not clean:
-            return False, "Target URL cannot be empty."
-
-        try:
-            parsed = urllib.parse.urlparse(clean)
-        except Exception as exc:
-            return False, f"Malformed URL: {exc}"
-
-        if parsed.scheme.lower() not in {"http", "https"}:
-            return False, f"Unsupported scheme '{parsed.scheme}'. Only HTTP and HTTPS are permitted."
-
-        hostname = parsed.hostname
-        if not hostname:
-            return False, "URL must contain a valid domain or hostname."
-
-        if parsed.username or parsed.password:
-            return False, "URLs with embedded credentials are prohibited for security."
-
-        # Check for loopback / localhost
-        lowered_host = hostname.lower()
-        if lowered_host in {"localhost", "127.0.0.1", "::1"}:
-            return False, "Access to localhost and loopback interfaces is restricted."
-
-        # If hostname is an IP literal, validate RFC protections
-        try:
-            ip = ipaddress.ip_address(lowered_host)
-            if ip.is_loopback or ip.is_private or ip.is_link_local or ip.is_reserved or ip.is_unspecified or ip.is_multicast:
-                return False, f"Access to IP address '{ip}' is blocked by security policy."
-        except ValueError:
-            # Not an IP literal, domain name is valid
-            pass
-
+        trust = classify_url(url)
+        if trust.level == URLTrustLevel.BLOCKED:
+            return False, trust.reason
         return True, ""
 
     def open_url(self, url: str, display_name: str | None = None) -> str:
-        """Open a validated URL strictly in Mozilla Firefox."""
+        """Open a validated URL strictly in Mozilla Firefox with Stage 2C confirmation protection."""
         clean_url = (url or "").strip()
         if not clean_url:
             return "Please provide a website to open."
 
-        if not clean_url.startswith(("http://", "https://")):
+        # If it does not already specify a scheme (e.g. scheme:// or scheme:), normalize to https://
+        has_scheme = bool(re.match(r"^[a-zA-Z][a-zA-Z0-9+\-.]*:", clean_url))
+        if not has_scheme:
             clean_url = f"https://{clean_url}"
 
-        is_safe, reason = self._is_safe_url(clean_url)
-        if not is_safe:
-            return f"Security check blocked navigation: {reason}"
+        # 1. Conservative trust classification
+        roots, exacts = self._get_trusted_domains()
+        trust = classify_url(clean_url, extra_trusted_roots=roots, extra_trusted_exact=exacts)
 
-        name = display_name or clean_url
+        if trust.level == URLTrustLevel.BLOCKED:
+            return f"Security check blocked navigation: {trust.reason}"
+
+        # 2. Check if confirmation is required for external / untrusted / lookalike URLs
+        if trust.level == URLTrustLevel.NEEDS_CONFIRMATION and self.require_confirmation:
+            callback = self.confirmation_callback or _global_browser_confirmation_callback
+            if callback is not None:
+                # Prompt user for explicit confirmation
+                try:
+                    confirmed = callback(clean_url, trust.display_host)
+                except Exception as exc:
+                    logger.error("Error during URL confirmation callback for %s: %s", clean_url, exc)
+                    return f"Navigation to {trust.display_host} aborted due to confirmation error."
+
+                if not confirmed:
+                    return f"Navigation to {trust.display_host} cancelled by user."
+            else:
+                # No confirmation callback registered and confirmation is strictly required -> fail closed
+                return (
+                    f"Navigation to untrusted site '{trust.display_host}' requires explicit confirmation, "
+                    "but no confirmation handler is available."
+                )
+
+        # 3. Proceed to open in browser (TRUSTED or confirmed)
+        name = display_name or trust.display_host or clean_url
         # Determine if webbrowser.open is mocked (test environment)
         is_mocked_browser = hasattr(webbrowser.open, "assert_called") or type(webbrowser.open).__name__ in ("MagicMock", "Mock")
         ff = self._get_firefox_controller()
