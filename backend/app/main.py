@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 
+from alembic.migration import MigrationContext
+from alembic.script import ScriptDirectory
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -24,13 +27,114 @@ from backend.app.routers import (
     welcome_router,
 )
 
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BACKEND_DIR.parent
+AUTHORIZED_DEV_DB = (BACKEND_DIR / "oliver_dev.db").resolve(strict=False)
+
+
+def _verify_startup_schema() -> None:
+    """Enforce strict fail-closed database initialization and migration head checks."""
+    dialect_name = engine.dialect.name
+
+    if dialect_name == "sqlite":
+        db_file = engine.url.database
+        is_memory = not db_file or db_file == ":memory:"
+
+        if not is_memory:
+            raw_path = Path(db_file)
+            resolved_target = (
+                (PROJECT_ROOT / raw_path).resolve(strict=False)
+                if not raw_path.is_absolute()
+                else raw_path.resolve(strict=False)
+            )
+            is_authorized = resolved_target == AUTHORIZED_DEV_DB
+        else:
+            is_authorized = True
+
+        if settings.ENVIRONMENT == "development" and is_authorized:
+            logger.info("Development SQLite detected. Initializing schema via create_all()...")
+            Base.metadata.create_all(bind=engine)
+            return
+
+        # Non-development or unauthorized SQLite target -> Fail closed immediately
+        error_msg = (
+            f"FATAL STARTUP BLOCKED: create_all() is unauthorized for SQLite target in environment "
+            f"'{settings.ENVIRONMENT}'. Auto-DDL is permitted strictly for '{AUTHORIZED_DEV_DB}' "
+            "in 'development' mode."
+        )
+        logger.critical(error_msg)
+        raise RuntimeError(error_msg)
+
+    elif dialect_name in ("postgresql", "postgresql+psycopg"):
+        logger.info("PostgreSQL backend detected. Verifying Alembic migration status...")
+        script_location = (BACKEND_DIR / "alembic").resolve()
+
+        if not script_location.exists():
+            raise RuntimeError(f"FATAL STARTUP BLOCKED: Alembic directory not found at {script_location}")
+
+        script_dir = ScriptDirectory(str(script_location))
+        heads = script_dir.get_heads()
+
+        if not heads:
+            error_msg = (
+                "FATAL STARTUP BLOCKED: No Alembic migrations exist in backend/alembic/versions/. "
+                "PostgreSQL requires managed migrations."
+            )
+            logger.critical(error_msg)
+            raise RuntimeError(error_msg)
+
+        if len(heads) > 1:
+            error_msg = (
+                f"FATAL STARTUP BLOCKED: Multiple Alembic migration heads detected: {heads}. "
+                "Migration branches must be merged via 'alembic merge' before startup."
+            )
+            logger.critical(error_msg)
+            raise RuntimeError(error_msg)
+
+        expected_head = heads[0]
+
+        with engine.connect() as conn:
+            context = MigrationContext.configure(conn)
+            current_heads = context.get_current_heads()
+
+        if not current_heads:
+            error_msg = (
+                "FATAL STARTUP BLOCKED: Database has no applied Alembic revisions (unmigrated). "
+                f"Expected migration head: '{expected_head}'."
+            )
+            logger.critical(error_msg)
+            raise RuntimeError(error_msg)
+
+        if len(current_heads) > 1:
+            error_msg = (
+                f"FATAL STARTUP BLOCKED: Database contains multiple applied revision heads: {current_heads}."
+            )
+            logger.critical(error_msg)
+            raise RuntimeError(error_msg)
+
+        current_rev = current_heads[0]
+        if current_rev != expected_head:
+            error_msg = (
+                f"FATAL STARTUP BLOCKED: Database revision '{current_rev}' does not match expected "
+                f"Alembic head '{expected_head}'."
+            )
+            logger.critical(error_msg)
+            raise RuntimeError(error_msg)
+
+        logger.info("Alembic migration head verified successfully: revision %s", current_rev)
+        return
+
+    else:
+        error_msg = f"FATAL STARTUP BLOCKED: Unsupported database dialect '{dialect_name}'."
+        logger.critical(error_msg)
+        raise RuntimeError(error_msg)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan context: initialize database tables and resources."""
-    logger.info("Initializing database schema for OLIVER 3.0...")
-    # Create tables if not existing (dev SQLite mode)
-    Base.metadata.create_all(bind=engine)
+    """Application lifespan context: verify schema readiness before accepting requests."""
+    logger.info("Verifying database schema readiness for OLIVER 3.0...")
+    _verify_startup_schema()
     logger.info("OLIVER 3.0 Central Backend started successfully on %s:%d", settings.HOST, settings.PORT)
     yield
     logger.info("Shutting down OLIVER 3.0 Central Backend...")
@@ -93,4 +197,3 @@ def root():
         "status": "online",
         "docs": "/docs" if settings.DEBUG else "disabled",
     }
-
