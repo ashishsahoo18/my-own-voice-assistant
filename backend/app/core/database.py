@@ -5,24 +5,38 @@ from __future__ import annotations
 from typing import Generator
 
 from sqlalchemy import create_engine, event
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from backend.app.core.config import settings
 
-# Engine configuration
-connect_args = {}
-if settings.DATABASE_URL.startswith("sqlite"):
-    connect_args["check_same_thread"] = False
+# Parse the URL once to determine dialect reliably (avoids fragile string prefix matching).
+_db_url = make_url(settings.DATABASE_URL)
+_dialect = _db_url.get_dialect().name  # e.g. "sqlite", "postgresql"
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args=connect_args,
-    pool_pre_ping=True,
-    echo=False,
-)
+# Build engine keyword arguments conditionally on dialect.
+# SQLite must NOT receive pool_size / max_overflow / pool_recycle (StaticPool used internally).
+# PostgreSQL benefits from explicit pool tuning and a fast connect timeout.
+_engine_kwargs: dict = {"pool_pre_ping": True, "echo": False}
 
-# Enforce foreign key constraints for SQLite
-if settings.DATABASE_URL.startswith("sqlite"):
+if _dialect == "sqlite":
+    _engine_kwargs["connect_args"] = {"check_same_thread": False}
+elif _dialect == "postgresql":
+    _engine_kwargs.update(
+        {
+            "pool_size": 5,
+            "max_overflow": 10,
+            "pool_timeout": 30,
+            "pool_recycle": 1800,
+            "connect_args": {"connect_timeout": 10},
+        }
+    )
+# Unknown dialects: pass no extra kwargs; _verify_startup_schema() will reject them at startup.
+
+engine = create_engine(settings.DATABASE_URL, **_engine_kwargs)
+
+# Enforce foreign key constraints for SQLite (PostgreSQL enforces FKs natively).
+if _dialect == "sqlite":
     @event.listens_for(engine, "connect")
     def set_sqlite_pragma(dbapi_connection, connection_record):
         cursor = dbapi_connection.cursor()

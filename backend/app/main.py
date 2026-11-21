@@ -13,6 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from sqlalchemy.exc import OperationalError
 
 from backend.app.core.config import settings
 from backend.app.core.database import Base, engine
@@ -93,9 +94,20 @@ def _verify_startup_schema() -> None:
 
         expected_head = heads[0]
 
-        with engine.connect() as conn:
-            context = MigrationContext.configure(conn)
-            current_heads = context.get_current_heads()
+        try:
+            with engine.connect() as conn:
+                context = MigrationContext.configure(conn)
+                current_heads = context.get_current_heads()
+        except OperationalError as e:
+            # Do NOT log str(e) — it may contain the connection URL and credentials.
+            # Report only the error type and a sanitized description.
+            error_msg = (
+                f"FATAL STARTUP BLOCKED: PostgreSQL is unreachable or refused the connection "
+                f"({type(e).__name__}). Ensure the database container is running and "
+                "credentials are correct before starting the application."
+            )
+            logger.critical(error_msg)
+            raise RuntimeError(error_msg) from e
 
         if not current_heads:
             error_msg = (
