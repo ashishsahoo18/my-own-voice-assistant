@@ -1,0 +1,37 @@
+# ==============================================================================
+# OLIVER 3.0 — Local PostgreSQL Infrastructure (Stage 2.1A.4)
+# ==============================================================================
+# Orchestrates local PostgreSQL container for OLIVER 3.0 backend development.
+# Conforms to Stage 2.1A.2 security closure specifications (SEC-01 through SEC-10).
+# Data is persisted in dedicated Docker named volume 'oliver_postgres_data'.
+# Port 5432 is bound exclusively to 127.0.0.1 for local network isolation.
+# ==============================================================================
+
+services:
+  postgres:
+    image: postgres:16.8
+    container_name: oliver_postgres
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: "${POSTGRES_ADMIN_USER:-postgres}"
+      POSTGRES_PASSWORD: "${POSTGRES_ADMIN_PASSWORD:-${POSTGRES_PASSWORD:?FATAL: POSTGRES_ADMIN_PASSWORD must be set in backend/.env}}"
+      POSTGRES_DB: "${POSTGRES_ADMIN_DB:-postgres}"
+      POSTGRES_MIGRATOR_PASSWORD: "${POSTGRES_MIGRATOR_PASSWORD:?FATAL: POSTGRES_MIGRATOR_PASSWORD must be set in backend/.env}"
+      POSTGRES_APP_PASSWORD: "${POSTGRES_APP_PASSWORD:?FATAL: POSTGRES_APP_PASSWORD must be set in backend/.env}"
+      POSTGRES_TEST_PASSWORD: "${POSTGRES_TEST_PASSWORD:?FATAL: POSTGRES_TEST_PASSWORD must be set in backend/.env}"
+      PGDATA: "/var/lib/postgresql/data/pgdata"
+    volumes:
+      - oliver_postgres_data:/var/lib/postgresql/data
+      - ./scripts/init_postgres.sh:/docker-entrypoint-initdb.d/01_init_postgres.sh:ro
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${POSTGRES_ADMIN_USER:-postgres}", "-d", "${POSTGRES_ADMIN_DB:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  oliver_postgres_data:
+    name: oliver_postgres_data
